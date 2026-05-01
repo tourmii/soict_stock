@@ -1,0 +1,37 @@
+.leaderboard-page { background: var(--bg-page); min-height: calc(100vh - 72px); }
+
+.podium {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr 1fr;
+  gap: var(--sp-4);
+  align-items: end;
+}
+
+.podium__card {
+  background: var(--white);
+  border-radius: var(--radius-xl);
+  padding: var(--sp-6);
+  text-align: center;
+  border: var(--border-light);
+  box-shadow: var(--shadow-card);
+  transition: transform var(--transition-normal);
+}
+
+.podium__card:hover { transform: translateY(-4px); box-shadow: var(--shadow-card-hover); }
+
+.podium__card--1 {
+  border-top: 3px solid #FFD700;
+  padding: var(--sp-8) var(--sp-6);
+}
+
+.podium__card--2 { border-top: 3px solid #C0C0C0; }
+.podium__card--3 { border-top: 3px solid #CD7F32; }
+
+.podium__medal { font-size: 40px; margin-bottom: var(--sp-3); }
+.podium__name { font-size: var(--text-md); font-weight: var(--fw-bold); margin-bottom: var(--sp-2); }
+.podium__value { font-size: var(--text-lg); font-weight: var(--fw-bold); color: var(--primary); margin-bottom: var(--sp-2); }
+
+@media (max-width: 768px) {
+  .podium { grid-template-columns: 1fr; gap: var(--sp-3); }
+  .podium__card--1 { order: -1; }
+}
