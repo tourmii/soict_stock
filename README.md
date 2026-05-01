@@ -1,0 +1,1 @@
+# soict_stock
