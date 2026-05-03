@@ -1,21 +1,102 @@
 import { create } from 'zustand';
+import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 
-export const useLeaderboardStore = create((set) => ({
-  entries: [
-    { rank: 1, name: 'TradeMaster_Pro', portfolio: 189450.20, return: 26.30, sharpe: 2.45, badge: 'top_trader', trades: 142 },
-    { rank: 2, name: 'AlphaSeeker', portfolio: 178230.50, return: 18.82, sharpe: 2.12, badge: 'risk_master', trades: 98 },
-    { rank: 3, name: 'MarketWhiz', portfolio: 171890.00, return: 14.59, sharpe: 1.87, badge: 'bear_survivor', trades: 215 },
-    { rank: 4, name: 'StockNinja', portfolio: 165420.30, return: 10.28, sharpe: 1.65, badge: null, trades: 76 },
-    { rank: 5, name: 'BullRunner', portfolio: 159780.40, return: 6.52, sharpe: 1.42, badge: null, trades: 183 },
-    { rank: 6, name: 'ValueHawk', portfolio: 156340.10, return: 4.23, sharpe: 1.28, badge: null, trades: 54 },
-    { rank: 7, name: 'SwingKing', portfolio: 153290.80, return: 2.19, sharpe: 1.05, badge: null, trades: 267 },
-    { rank: 8, name: 'DipBuyer', portfolio: 150890.60, return: 0.59, sharpe: 0.89, badge: null, trades: 145 },
-    { rank: 9, name: 'ChartSavant', portfolio: 148560.20, return: -0.96, sharpe: 0.65, badge: null, trades: 312 },
-    { rank: 10, name: 'RiskTaker', portfolio: 145230.50, return: -3.18, sharpe: 0.34, badge: null, trades: 89 },
-  ],
-  period: 'weekly',
+export const useLeaderboardStore = create((set, get) => ({
+  entries: [],
+  period: 'all-time',
   userRank: null,
+  loaded: false,
 
-  setPeriod: (period) => set({ period }),
+  setPeriod: (period) => {
+    set({ period });
+    get().fetchFromSupabase();
+  },
+
   setEntries: (entries) => set({ entries }),
+
+  /* Fetch leaderboard from Supabase */
+  fetchFromSupabase: async () => {
+    if (!isSupabaseConfigured()) {
+      set({ loaded: true });
+      return;
+    }
+
+    try {
+      const { period } = get();
+      const { data, error } = await supabase
+        .from('leaderboard_entries')
+        .select('*')
+        .eq('period', period)
+        .order('portfolio_value', { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.error('Leaderboard fetch error:', error);
+        set({ loaded: true });
+        return;
+      }
+
+      const entries = (data || []).map((row, i) => ({
+        rank: i + 1,
+        userId: row.user_id,
+        name: row.display_name,
+        portfolio: row.portfolio_value,
+        return: row.total_return,
+        sharpe: row.sharpe_ratio || 0,
+        badge: null,
+        trades: row.trades_count || 0,
+      }));
+
+      // Find current user rank
+      let userRank = null;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const idx = entries.findIndex((e) => e.userId === user.id);
+          userRank = idx >= 0 ? idx + 1 : null;
+        }
+      } catch (_) {}
+
+      set({ entries, userRank, loaded: true });
+    } catch (err) {
+      console.error('Leaderboard fetch error:', err);
+      set({ loaded: true });
+    }
+  },
+
+  /* Submit user score */
+  submitScore: async (portfolioValue, totalReturn, tradesCount) => {
+    if (!isSupabaseConfigured()) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('display_name')
+        .eq('id', user.id)
+        .single();
+
+      const displayName = profile?.display_name || user.email?.split('@')[0] || 'Trader';
+
+      await supabase
+        .from('leaderboard_entries')
+        .upsert({
+          user_id: user.id,
+          display_name: displayName,
+          portfolio_value: portfolioValue,
+          total_return: totalReturn,
+          sharpe_ratio: 0,
+          trades_count: tradesCount,
+          period: 'all-time',
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'user_id,period' });
+
+      // Refresh leaderboard
+      await get().fetchFromSupabase();
+    } catch (err) {
+      console.error('Score submit error:', err);
+    }
+  },
 }));

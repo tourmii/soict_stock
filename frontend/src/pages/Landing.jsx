@@ -19,7 +19,8 @@ function generateWaveData(points = 60) {
 
 export default function Landing() {
   const prices = useMarketStore((s) => s.prices);
-  const histories = useMarketStore((s) => s.histories);
+  const getHistories = useMarketStore((s) => s.getHistories);
+  const histories = useMemo(() => getHistories(), [prices]);
   const getChange = useMarketStore((s) => s.getChange);
   const waveData = useMemo(() => generateWaveData(), []);
   const waveData2 = useMemo(() => generateWaveData(), []);

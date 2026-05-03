@@ -8,18 +8,26 @@ function generateNewsItem(template, stock) {
   return {
     id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
     headline,
+    description: 'Market simulation generated news event.',
+    url: null,
+    source: 'SoictStock Simulation',
+    image: null,
     type: template.type,
     sentiment: template.sentiment,
-    ticker: stock?.ticker || null,
+    affectedTickers: stock ? [stock.ticker] : STOCKS.map((s) => s.ticker),
+    isMarketWide: template.sectorWide || false,
     impact: impact,
     timestamp: new Date().toISOString(),
-    sectorWide: template.sectorWide || false,
   };
 }
 
 export const useNewsStore = create((set, get) => ({
   newsItems: [],
+  selectedNews: null, // for the popup modal
   scheduledEvents: [],
+
+  setSelectedNews: (item) => set({ selectedNews: item }),
+  clearSelectedNews: () => set({ selectedNews: null }),
 
   generateInitialNews: () => {
     const items = [];
@@ -27,10 +35,25 @@ export const useNewsStore = create((set, get) => ({
       const template = NEWS_TEMPLATES[Math.floor(Math.random() * NEWS_TEMPLATES.length)];
       const stock = STOCKS[Math.floor(Math.random() * STOCKS.length)];
       const item = generateNewsItem(template, template.sectorWide ? null : stock);
-      item.timestamp = new Date(Date.now() - i * 600000).toISOString(); // stagger
+      item.timestamp = new Date(Date.now() - i * 600000).toISOString();
       items.push(item);
     }
     set({ newsItems: items });
+  },
+
+  /* Fetch real news from backend API */
+  fetchFromBackend: async () => {
+    try {
+      const res = await fetch('/api/news?limit=20');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (data && data.length > 0) {
+        set({ newsItems: data });
+      }
+    } catch (err) {
+      // Backend not available — keep local news
+      console.log('News fetch from backend failed, using local news');
+    }
   },
 
   injectNews: () => {

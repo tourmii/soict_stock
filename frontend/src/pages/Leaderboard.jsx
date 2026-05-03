@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { useLeaderboardStore } from '../store/leaderboardStore';
+import { useAuthStore } from '../store/authStore';
 import { BADGES } from '../lib/constants';
 import { formatCurrency, formatPercentRaw } from '../lib/formatters';
 import './Leaderboard.css';
@@ -8,8 +9,16 @@ export default function Leaderboard() {
   const entries = useLeaderboardStore((s) => s.entries);
   const period = useLeaderboardStore((s) => s.period);
   const setPeriod = useLeaderboardStore((s) => s.setPeriod);
+  const userRank = useLeaderboardStore((s) => s.userRank);
+  const loaded = useLeaderboardStore((s) => s.loaded);
+  const fetchFromSupabase = useLeaderboardStore((s) => s.fetchFromSupabase);
+  const user = useAuthStore((s) => s.user);
 
-  const [showBadges, setShowBadges] = useState(false);
+  useEffect(() => {
+    fetchFromSupabase();
+  }, []);
+
+  const isEmpty = loaded && entries.length === 0;
 
   return (
     <div className="leaderboard-page" id="leaderboard-page">
@@ -27,61 +36,77 @@ export default function Leaderboard() {
                 </button>
               ))}
             </div>
-            <button onClick={()=>setShowBadges(!showBadges)} className="btn btn-outline btn-sm">🏅 Badges</button>
           </div>
         </div>
+
+        {/* Empty State */}
+        {isEmpty && (
+          <div className="card" style={{padding:'60px 40px',textAlign:'center'}}>
+            <div style={{fontSize:'64px',marginBottom:'16px'}}>🏆</div>
+            <h3 style={{fontSize:'var(--text-xl)',fontWeight:700,marginBottom:'8px'}}>No Traders Yet</h3>
+            <p style={{color:'var(--gray-500)',maxWidth:'400px',margin:'0 auto 24px',lineHeight:1.6}}>
+              {user
+                ? 'Start trading in the simulator to appear on the leaderboard! Your portfolio value and returns will be tracked automatically.'
+                : 'Sign in and start trading to compete with other traders. Your performance will be tracked and ranked.'}
+            </p>
+            {!user && (
+              <p style={{color:'var(--primary)',fontWeight:600,fontSize:'var(--text-sm)'}}>
+                Sign in to get started →
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* User Rank Banner */}
+        {userRank && (
+          <div className="card" style={{padding:'16px 24px',marginBottom:'var(--sp-4)',background:'linear-gradient(135deg, #1B3BFC08, #8B5CF608)',border:'1px solid var(--primary)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+            <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
+              <span style={{fontSize:'24px'}}>📊</span>
+              <div>
+                <p style={{fontWeight:700,fontSize:'var(--text-sm)'}}>Your Rank</p>
+                <p style={{color:'var(--gray-500)',fontSize:'12px'}}>Keep trading to climb higher!</p>
+              </div>
+            </div>
+            <span style={{fontSize:'var(--text-xl)',fontWeight:800,color:'var(--primary)'}}>#{userRank}</span>
+          </div>
+        )}
 
         {/* Top 3 Podium */}
-        <div className="podium">
-          {entries.slice(0, 3).map((e, i) => (
-            <div key={e.rank} className={`podium__card podium__card--${i+1}`}>
-              <div className="podium__medal">{['🥇','🥈','🥉'][i]}</div>
-              <h4 className="podium__name">{e.name}</h4>
-              <p className="podium__value">{formatCurrency(e.portfolio)}</p>
-              <span className={`badge ${e.return>=0?'badge-green':'badge-red'}`}>{e.return>=0?'+':''}{e.return.toFixed(2)}%</span>
-              <p style={{fontSize:'11px',color:'var(--gray-400)',marginTop:'4px'}}>Sharpe: {e.sharpe.toFixed(2)}</p>
-            </div>
-          ))}
-        </div>
+        {entries.length >= 3 && (
+          <div className="podium">
+            {entries.slice(0, 3).map((e, i) => (
+              <div key={e.rank} className={`podium__card podium__card--${i+1} ${e.userId && userRank === e.rank ? 'podium__card--you' : ''}`}>
+                <div className="podium__medal">{['🥇','🥈','🥉'][i]}</div>
+                <h4 className="podium__name">{e.name}</h4>
+                <p className="podium__value">{formatCurrency(e.portfolio)}</p>
+                <span className={`badge ${e.return>=0?'badge-green':'badge-red'}`}>{e.return>=0?'+':''}{e.return.toFixed(2)}%</span>
+                <p style={{fontSize:'11px',color:'var(--gray-400)',marginTop:'4px'}}>{e.trades} trades</p>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* Full Table */}
-        <div className="card" style={{padding:0,marginTop:'var(--sp-6)'}}>
-          <div className="table-container">
-            <table className="table">
-              <thead><tr><th>Rank</th><th>Trader</th><th>Portfolio Value</th><th>Return</th><th>Sharpe Ratio</th><th>Trades</th><th>Badge</th></tr></thead>
-              <tbody>
-                {entries.map((e) => {
-                  const badge = BADGES.find((b) => b.id === e.badge);
-                  return (
-                    <tr key={e.rank}>
+        {entries.length > 0 && (
+          <div className="card" style={{padding:0,marginTop:'var(--sp-6)'}}>
+            <div className="table-container">
+              <table className="table">
+                <thead><tr><th>Rank</th><th>Trader</th><th>Portfolio Value</th><th>Return</th><th>Trades</th></tr></thead>
+                <tbody>
+                  {entries.map((e) => (
+                    <tr key={e.rank} style={{background: userRank === e.rank ? 'var(--primary-bg)' : undefined}}>
                       <td><span style={{fontWeight:700,color:e.rank<=3?'var(--primary)':'var(--gray-600)'}}>{e.rank<=3?['🥇','🥈','🥉'][e.rank-1]:e.rank}</span></td>
-                      <td style={{fontWeight:600}}>{e.name}</td>
+                      <td style={{fontWeight:600}}>
+                        {e.name}
+                        {userRank === e.rank && <span className="badge badge-primary" style={{marginLeft:'8px',fontSize:'10px'}}>You</span>}
+                      </td>
                       <td style={{fontWeight:600}}>{formatCurrency(e.portfolio)}</td>
                       <td><span style={{color:e.return>=0?'var(--green)':'var(--red)',fontWeight:600}}>{e.return>=0?'+':''}{e.return.toFixed(2)}%</span></td>
-                      <td>{e.sharpe.toFixed(2)}</td>
                       <td>{e.trades}</td>
-                      <td>{badge ? <span title={badge.description}>{badge.icon} {badge.name}</span> : '—'}</td>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-
-        {/* Badges Section */}
-        {showBadges && (
-          <div style={{marginTop:'var(--sp-8)'}}>
-            <h3 style={{marginBottom:'var(--sp-4)'}}>🏅 Achievement Badges</h3>
-            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(220px,1fr))',gap:'var(--sp-4)'}}>
-              {BADGES.map((badge)=>(
-                <div key={badge.id} className="card" style={{padding:'20px',textAlign:'center',opacity:0.6}}>
-                  <div style={{fontSize:'36px',marginBottom:'8px'}}>{badge.icon}</div>
-                  <h5 style={{fontSize:'var(--text-base)',fontWeight:700,marginBottom:'4px'}}>{badge.name}</h5>
-                  <p style={{fontSize:'var(--text-xs)',color:'var(--gray-500)'}}>{badge.description}</p>
-                  <span className="badge badge-gray" style={{marginTop:'8px',fontSize:'10px'}}>🔒 Locked</span>
-                </div>
-              ))}
+                  ))}
+                </tbody>
+              </table>
             </div>
           </div>
         )}

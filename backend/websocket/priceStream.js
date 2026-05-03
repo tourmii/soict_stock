@@ -3,14 +3,20 @@ export function setupPriceStream(wss, engine) {
 
   wss.on('connection', (ws) => {
     clients.add(ws);
-    console.log(`📡 WebSocket client connected (${clients.size} total)`);
+    console.log(` WebSocket client connected (${clients.size} total)`);
 
-    // Send initial prices
-    ws.send(JSON.stringify({ type: 'prices', data: engine.prices }));
+    // Send full tick history so all clients have consistent price data
+    ws.send(JSON.stringify({
+      type: 'init',
+      data: {
+        prices: engine.prices,
+        rawTicks: engine.rawTicks,
+      },
+    }));
 
     ws.on('close', () => {
       clients.delete(ws);
-      console.log(`📡 WebSocket client disconnected (${clients.size} total)`);
+      console.log(` WebSocket client disconnected (${clients.size} total)`);
     });
 
     ws.on('error', () => clients.delete(ws));

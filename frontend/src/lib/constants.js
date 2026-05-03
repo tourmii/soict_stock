@@ -13,7 +13,7 @@ export const INITIAL_CASH = 150000;
 
 export const ORDER_TYPES = ['Market', 'Limit', 'Stop-Loss'];
 
-export const TIMEFRAMES = ['1D', '1W', '1M', '3M', '1Y', 'All'];
+export const TIMEFRAMES = ['15m', '1H', '4H', '1D', '1W', '1M'];
 
 export const MARKET_REGIMES = {
   bull: { name: 'Bull Market', drift: 0.001, volatilityMult: 0.8, color: '#22C55E' },

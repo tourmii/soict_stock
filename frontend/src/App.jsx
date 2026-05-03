@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useEffect } from 'react';
 import Navbar from './components/layout/Navbar';
 import Footer from './components/layout/Footer';
@@ -6,30 +6,51 @@ import Landing from './pages/Landing';
 import Simulation from './pages/Simulation';
 import Portfolio from './pages/Portfolio';
 import Leaderboard from './pages/Leaderboard';
-import Backtest from './pages/Backtest';
+
+import Learn from './pages/Learn';
 import Toast from './components/shared/Toast';
 import { useMarketStore } from './store/marketStore';
 import { useNewsStore } from './store/newsStore';
 import { useOrderStore } from './store/orderStore';
 import { usePortfolioStore } from './store/portfolioStore';
+import { useLeaderboardStore } from './store/leaderboardStore';
+import { useAuthStore } from './store/authStore';
 
 function App() {
   const simulateTick = useMarketStore((s) => s.simulateTick);
   const prices = useMarketStore((s) => s.prices);
   const generateInitialNews = useNewsStore((s) => s.generateInitialNews);
   const injectNews = useNewsStore((s) => s.injectNews);
+  const fetchFromBackend = useNewsStore((s) => s.fetchFromBackend);
   const checkOrders = useOrderStore((s) => s.checkOrders);
   const buy = usePortfolioStore((s) => s.buy);
   const sell = usePortfolioStore((s) => s.sell);
   const recordSnapshot = usePortfolioStore((s) => s.recordSnapshot);
+  const loadFromSupabase = usePortfolioStore((s) => s.loadFromSupabase);
+  const fetchLeaderboard = useLeaderboardStore((s) => s.fetchFromSupabase);
 
   const updatePrices = useMarketStore((s) => s.updatePrices);
+  const initFromServer = useMarketStore((s) => s.initFromServer);
+  const loadWatchlistFromSupabase = useMarketStore((s) => s.loadWatchlistFromSupabase);
   const isConnected = useMarketStore((s) => s.isConnected);
   const setConnected = useMarketStore((s) => s.setConnected);
 
+  const initializeAuth = useAuthStore((s) => s.initialize);
+  const user = useAuthStore((s) => s.user);
+
   useEffect(() => {
     generateInitialNews();
+    initializeAuth();
   }, []);
+
+  // Load user data from Supabase when auth state changes
+  useEffect(() => {
+    if (user) {
+      loadFromSupabase();
+      loadWatchlistFromSupabase();
+      fetchLeaderboard();
+    }
+  }, [user]);
 
   // WebSocket connection for live market data
   useEffect(() => {
@@ -44,7 +65,10 @@ function App() {
 
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
-      if (msg.type === 'prices' || msg.type === 'tick') {
+      if (msg.type === 'init') {
+        // Replace local data with server's consistent history
+        initFromServer(msg.data);
+      } else if (msg.type === 'tick') {
         updatePrices(msg.data);
       }
     };
@@ -85,18 +109,27 @@ function App() {
     return () => clearInterval(interval);
   }, []);
 
-  // Inject random news (fallback when disconnected)
+  // Fetch news from backend API or inject locally
   useEffect(() => {
-    if (isConnected) return;
-    const scheduleNext = () => {
-      const delay = 30000 + Math.random() * 60000;
-      return setTimeout(() => {
-        injectNews();
-        timerRef = scheduleNext();
-      }, delay);
-    };
-    let timerRef = scheduleNext();
-    return () => clearTimeout(timerRef);
+    if (isConnected) {
+      // Connected to backend — fetch real news periodically
+      fetchFromBackend();
+      const interval = setInterval(() => {
+        fetchFromBackend();
+      }, 30000); // refresh every 30s
+      return () => clearInterval(interval);
+    } else {
+      // Disconnected — inject local simulated news
+      const scheduleNext = () => {
+        const delay = 30000 + Math.random() * 60000;
+        return setTimeout(() => {
+          injectNews();
+          timerRef = scheduleNext();
+        }, delay);
+      };
+      let timerRef = scheduleNext();
+      return () => clearTimeout(timerRef);
+    }
   }, [isConnected]);
 
   return (
@@ -108,7 +141,9 @@ function App() {
           <Route path="/simulation" element={<Simulation />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
-          <Route path="/backtest" element={<Backtest />} />
+          <Route path="/learn" element={<Learn />} />
+          <Route path="/index.html" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>
       <Footer />

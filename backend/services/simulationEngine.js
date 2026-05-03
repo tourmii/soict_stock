@@ -18,7 +18,7 @@ export class SimulationEngine {
   constructor() {
     this.stocks = STOCKS;
     this.prices = {};
-    this.histories = {};
+    this.rawTicks = {};      // minute-level tick data per ticker
     this.regime = 'normal';
     this.driftOverrides = {};
     this.volatilityMultipliers = {};
@@ -30,35 +30,34 @@ export class SimulationEngine {
 
   _initializePrices() {
     for (const stock of this.stocks) {
-      this.prices[stock.ticker] = stock.basePrice;
-      this.histories[stock.ticker] = this._generateHistory(stock, 365);
+      this.rawTicks[stock.ticker] = this._generateMinuteTicks(stock, 90);
+      const lastTick = this.rawTicks[stock.ticker][this.rawTicks[stock.ticker].length - 1];
+      this.prices[stock.ticker] = lastTick.price;
     }
   }
 
-  _generateHistory(stock, days) {
-    const history = [];
+  /**
+   * Generate granular 5-minute tick data for N days of history.
+   */
+  _generateMinuteTicks(stock, days) {
+    const ticks = [];
     let price = stock.basePrice * (0.7 + Math.random() * 0.3);
     const now = Math.floor(Date.now() / 1000);
-    const todayBarTime = Math.floor(now / 86400) * 86400;
+    const intervalSec = 300; // 5 minutes
+    const ticksPerDay = 288;
+    const totalTicks = days * ticksPerDay;
+    const startTime = now - totalTicks * intervalSec;
+    const dt = 1 / (252 * ticksPerDay);
 
-    for (let i = days; i >= 0; i--) {
-      const ohlcv = this._generateOHLCV(price, stock.drift, stock.volatility);
-      history.push({ time: todayBarTime - i * 86400, ...ohlcv });
-      price = ohlcv.close;
+    for (let i = 0; i <= totalTicks; i++) {
+      price = i === 0 ? price : this._nextPrice(price, stock.drift, stock.volatility, dt);
+      ticks.push({
+        time: startTime + i * intervalSec,
+        price,
+        volume: Math.floor(200 + Math.random() * 2000),
+      });
     }
-
-    this.prices[stock.ticker] = price;
-    return history;
-  }
-
-  _generateOHLCV(open, drift, volatility) {
-    let high = open, low = open, close = open;
-    for (let i = 0; i < 10; i++) {
-      close = this._nextPrice(close, drift, volatility, 1 / (252 * 10));
-      if (close > high) high = close;
-      if (close < low) low = close;
-    }
-    return { open, high, low, close, volume: Math.floor(50000 + Math.random() * 200000) };
+    return ticks;
   }
 
   _nextPrice(price, drift, volatility, dt = 1 / 252) {
@@ -72,25 +71,23 @@ export class SimulationEngine {
 
   tick() {
     const updates = {};
+    const now = Math.floor(Date.now() / 1000);
+
     for (const stock of this.stocks) {
       const newPrice = this._nextPrice(this.prices[stock.ticker], stock.drift, stock.volatility);
       this.prices[stock.ticker] = newPrice;
 
-      const hist = this.histories[stock.ticker];
-      const now = Math.floor(Date.now() / 1000);
-      const barTime = Math.floor(now / 86400) * 86400;
-      const lastBar = hist[hist.length - 1];
+      // Append raw tick
+      this.rawTicks[stock.ticker].push({
+        time: now,
+        price: newPrice,
+        volume: Math.floor(200 + Math.random() * 2000),
+      });
 
-      if (lastBar && lastBar.time === barTime) {
-        lastBar.close = newPrice;
-        if (newPrice > lastBar.high) lastBar.high = newPrice;
-        if (newPrice < lastBar.low) lastBar.low = newPrice;
-        lastBar.volume += Math.floor(Math.random() * 1000);
-      } else {
-        hist.push({ time: barTime, open: newPrice, high: newPrice, low: newPrice, close: newPrice, volume: Math.floor(Math.random() * 50000) });
-      }
-
-      updates[stock.ticker] = { price: newPrice, ohlcv: hist[hist.length - 1] };
+      updates[stock.ticker] = {
+        price: newPrice,
+        tick: { time: now, price: newPrice, volume: Math.floor(200 + Math.random() * 2000) },
+      };
     }
 
     for (const listener of this.listeners) {
@@ -102,7 +99,7 @@ export class SimulationEngine {
   start(intervalMs = 3000) {
     if (this.intervalId) return;
     this.intervalId = setInterval(() => this.tick(), intervalMs);
-    console.log('📈 Simulation engine started');
+    console.log('📈 Simulation engine started (5-min tick granularity)');
   }
 
   stop() {

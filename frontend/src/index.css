@@ -147,6 +147,15 @@ html {
   scroll-behavior: smooth;
 }
 
+html, body, #root {
+  height: 100%;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
 body {
   font-family: var(--font-body);
   font-size: var(--text-base);

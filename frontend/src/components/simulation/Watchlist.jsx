@@ -7,7 +7,7 @@ import SparklineChart from '../shared/SparklineChart';
 export default function Watchlist() {
   const [tab, setTab] = useState('watchlist');
   const prices = useMarketStore((s) => s.prices);
-  const histories = useMarketStore((s) => s.histories);
+  const getHistories = useMarketStore((s) => s.getHistories);
   const watchlist = useMarketStore((s) => s.watchlist);
   const getChange = useMarketStore((s) => s.getChange);
   const setSelectedTicker = useMarketStore((s) => s.setSelectedTicker);
@@ -16,13 +16,14 @@ export default function Watchlist() {
 
   const displayStocks = useMemo(() => {
     const tickers = tab === 'watchlist' ? watchlist : STOCKS.map((s) => s.ticker);
+    const histories = getHistories();
     return tickers.map((t) => {
       const stock = STOCKS.find((s) => s.ticker === t);
       const { change, changePercent } = getChange(t);
       const spark = (histories[t] || []).slice(-20).map((h) => h.close);
       return { ...stock, price: prices[t], change, changePercent, sparkline: spark };
     });
-  }, [tab, watchlist, prices, histories]);
+  }, [tab, watchlist, prices]);
 
   const otherStocks = STOCKS.filter((s) => !watchlist.includes(s.ticker));
 

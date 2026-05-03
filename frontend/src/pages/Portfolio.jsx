@@ -11,7 +11,7 @@ import './Portfolio.css';
 
 export default function Portfolio() {
   const prices = useMarketStore((s) => s.prices);
-  const histories = useMarketStore((s) => s.histories);
+  // histories not needed here — Portfolio uses portfolioStore
   const cash = usePortfolioStore((s) => s.cash);
   const getPortfolioValue = usePortfolioStore((s) => s.getPortfolioValue);
   const getUnrealizedPL = usePortfolioStore((s) => s.getUnrealizedPL);
