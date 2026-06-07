@@ -23,6 +23,7 @@ function App() {
   const injectNews = useNewsStore((s) => s.injectNews);
   const fetchFromBackend = useNewsStore((s) => s.fetchFromBackend);
   const checkOrders = useOrderStore((s) => s.checkOrders);
+  const loadOpenOrders = useOrderStore((s) => s.loadFromSupabase);
   const buy = usePortfolioStore((s) => s.buy);
   const sell = usePortfolioStore((s) => s.sell);
   const recordSnapshot = usePortfolioStore((s) => s.recordSnapshot);
@@ -46,7 +47,8 @@ function App() {
   // Load user data from Supabase when auth state changes
   useEffect(() => {
     if (user) {
-      loadFromSupabase();
+      loadFromSupabase(prices);
+      loadOpenOrders();
       loadWatchlistFromSupabase();
       fetchLeaderboard();
     }
@@ -92,9 +94,9 @@ function App() {
 
   // Check pending orders on price changes
   useEffect(() => {
-    const executeTrade = (type, ticker, quantity, price, orderType) => {
-      if (type === 'Buy') return buy(ticker, quantity, price, orderType);
-      if (type === 'Sell') return sell(ticker, quantity, price, orderType);
+    const executeTrade = (type, ticker, quantity, price, orderType, orderId) => {
+      if (type === 'Buy') return buy(ticker, quantity, price, orderType, prices, orderId);
+      if (type === 'Sell') return sell(ticker, quantity, price, orderType, prices, orderId);
       return false;
     };
     checkOrders(prices, executeTrade);

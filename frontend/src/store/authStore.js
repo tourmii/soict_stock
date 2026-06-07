@@ -71,7 +71,10 @@ export const useAuthStore = create((set, get) => ({
     });
 
     if (error) {
-      set({ error: error.message, loading: false });
+      const message = error.message?.toLowerCase().includes('email rate limit')
+        ? 'Supabase email rate limit exceeded. Wait before trying again, or disable email confirmations in Supabase Auth settings for local testing.'
+        : error.message;
+      set({ error: message, loading: false });
       return { error };
     }
 

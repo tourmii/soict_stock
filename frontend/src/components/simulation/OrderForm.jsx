@@ -35,10 +35,10 @@ export default function OrderForm() {
       let result;
       if (side === 'Buy') {
         if (totalValue > cash) { addToast({ type: 'error', title: 'Insufficient funds', message: `Need ${formatCurrency(totalValue)} but only have ${formatCurrency(cash)}` }); return; }
-        result = buy(ticker, quantity, currentPrice, orderType);
+        result = buy(ticker, quantity, currentPrice, orderType, prices);
       } else {
         if (quantity > maxSellQty) { addToast({ type: 'error', title: 'Insufficient shares', message: `You only own ${maxSellQty} shares of ${ticker}` }); return; }
-        result = sell(ticker, quantity, currentPrice, orderType);
+        result = sell(ticker, quantity, currentPrice, orderType, prices);
       }
       if (result) {
         const stock = STOCKS.find((s) => s.ticker === ticker);

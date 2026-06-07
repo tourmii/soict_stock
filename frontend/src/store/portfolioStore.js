@@ -11,7 +11,7 @@ export const usePortfolioStore = create((set, get) => ({
     dailyPLHistory: [],
 
     /* Buy shares */
-    buy: (ticker, quantity, price, orderType = 'Market') => {
+    buy: (ticker, quantity, price, orderType = 'Market', prices = {}, orderId = null) => {
         const total = quantity * price;
         const { cash, holdings, transactions } = get();
 
@@ -22,7 +22,7 @@ export const usePortfolioStore = create((set, get) => ({
         const avgPrice = (existing.avgPrice * existing.shares + price * quantity) / totalShares;
 
         const tx = {
-            id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+            id: orderId || Date.now().toString() + Math.random().toString(36).substr(2, 5),
             type: 'Buy',
             ticker,
             orderType,
@@ -43,12 +43,12 @@ export const usePortfolioStore = create((set, get) => ({
         });
 
         // Sync to Supabase in background
-        get().syncToSupabase(tx);
+        get().syncToSupabase(tx, prices);
         return tx;
     },
 
     /* Sell shares */
-    sell: (ticker, quantity, price, orderType = 'Market') => {
+    sell: (ticker, quantity, price, orderType = 'Market', prices = {}, orderId = null) => {
         const { cash, holdings, transactions } = get();
         const existing = holdings[ticker];
 
@@ -59,7 +59,7 @@ export const usePortfolioStore = create((set, get) => ({
         const remainingShares = existing.shares - quantity;
 
         const tx = {
-            id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
+            id: orderId || Date.now().toString() + Math.random().toString(36).substr(2, 5),
             type: 'Sell',
             ticker,
             orderType,
@@ -88,12 +88,12 @@ export const usePortfolioStore = create((set, get) => ({
         });
 
         // Sync to Supabase in background
-        get().syncToSupabase(tx);
+        get().syncToSupabase(tx, prices);
         return tx;
     },
 
     /* Sync portfolio state and transaction to Supabase */
-    syncToSupabase: async (tx) => {
+    syncToSupabase: async (tx, prices = {}) => {
         if (!isSupabaseConfigured()) return;
 
         try {
@@ -101,6 +101,10 @@ export const usePortfolioStore = create((set, get) => ({
             if (!user) return;
 
             const { cash, holdings, initialCash } = get();
+            const now = new Date().toISOString();
+            const portfolioValue = get().getPortfolioValue(prices);
+            const stockValue = Math.max(0, portfolioValue - cash);
+            const totalReturn = initialCash !== 0 ? ((portfolioValue - initialCash) / initialCash) * 100 : 0;
 
             // Update portfolio
             await supabase
@@ -110,15 +114,33 @@ export const usePortfolioStore = create((set, get) => ({
                     cash,
                     initial_cash: initialCash,
                     holdings,
-                    updated_at: new Date().toISOString(),
+                    updated_at: now,
                 }, { onConflict: 'user_id' });
+
+            await get().syncAssetsToSupabase(user.id, prices, now);
 
             // Insert transaction
             if (tx) {
                 await supabase
+                    .from('orders')
+                    .upsert({
+                        id: tx.id,
+                        user_id: user.id,
+                        type: tx.type,
+                        ticker: tx.ticker,
+                        order_type: tx.orderType,
+                        quantity: tx.quantity,
+                        price: tx.price,
+                        status: tx.status,
+                        created_at: tx.time,
+                        updated_at: now,
+                    });
+
+                await supabase
                     .from('transactions')
                     .insert({
                         user_id: user.id,
+                        order_id: tx.id,
                         type: tx.type,
                         ticker: tx.ticker,
                         order_type: tx.orderType,
@@ -129,22 +151,23 @@ export const usePortfolioStore = create((set, get) => ({
                     });
             }
 
-            // Auto-submit to leaderboard
             const { transactions } = get();
-            const portfolioValue = cash + Object.entries(holdings).reduce((sum, [, h]) => {
-                return sum + h.shares * (h.avgPrice || 0);
-            }, 0);
-            const totalReturn = ((portfolioValue - initialCash) / initialCash) * 100;
+            await get().savePortfolioSnapshot(user.id, prices, {
+                portfolioValue,
+                stockValue,
+                totalReturn,
+                createdAt: now,
+            });
 
             const { useLeaderboardStore } = await import('./leaderboardStore');
-            useLeaderboardStore.getState().submitScore(portfolioValue, totalReturn, transactions.length);
+            await useLeaderboardStore.getState().submitScore(portfolioValue, totalReturn, transactions.length);
         } catch (err) {
             console.error('Supabase sync error:', err);
         }
     },
 
     /* Load portfolio from Supabase */
-    loadFromSupabase: async () => {
+    loadFromSupabase: async (prices = {}) => {
         if (!isSupabaseConfigured()) return;
 
         try {
@@ -187,18 +210,20 @@ export const usePortfolioStore = create((set, get) => ({
                 }));
                 set({ transactions });
             }
+
+            await get().submitToLeaderboard(prices);
         } catch (err) {
             console.error('Portfolio load error:', err);
         }
     },
 
     /* Calculate portfolio value */
-    getPortfolioValue: (prices) => {
+    getPortfolioValue: (prices = {}) => {
         const { cash, holdings } = get();
         let stockValue = 0;
         for (const [ticker, holding] of Object.entries(holdings)) {
-            if (holding.shares > 0 && prices[ticker]) {
-                stockValue += holding.shares * prices[ticker];
+            if (holding.shares > 0) {
+                stockValue += holding.shares * (prices[ticker] || holding.avgPrice || 0);
             }
         }
         return cash + stockValue;
@@ -239,7 +264,7 @@ export const usePortfolioStore = create((set, get) => ({
         return Object.entries(holdings)
             .filter(([, h]) => h.shares > 0)
             .map(([ticker, h]) => {
-                const currentPrice = prices[ticker] || 0;
+                const currentPrice = prices[ticker] || h.avgPrice || 0;
                 const marketValue = h.shares * currentPrice;
                 const unrealizedPL = (currentPrice - h.avgPrice) * h.shares;
                 const unrealizedPLPercent = h.avgPrice > 0 ? ((currentPrice - h.avgPrice) / h.avgPrice) * 100 : 0;
@@ -285,6 +310,56 @@ export const usePortfolioStore = create((set, get) => ({
         get().submitToLeaderboard(prices);
     },
 
+    /* Store current holdings in normalized asset rows */
+    syncAssetsToSupabase: async (userId, prices = {}, updatedAt = new Date().toISOString()) => {
+        const { holdings } = get();
+        const rows = Object.entries(holdings).map(([ticker, h]) => {
+            const marketPrice = prices[ticker] || h.avgPrice || 0;
+            const shares = h.shares || 0;
+            return {
+                user_id: userId,
+                ticker,
+                shares,
+                avg_price: h.avgPrice || 0,
+                realized_pl: h.realizedPL || 0,
+                market_price: marketPrice,
+                market_value: shares * marketPrice,
+                unrealized_pl: shares * (marketPrice - (h.avgPrice || 0)),
+                updated_at: updatedAt,
+            };
+        });
+
+        if (rows.length === 0) return;
+
+        const { error } = await supabase
+            .from('portfolio_assets')
+            .upsert(rows, { onConflict: 'user_id,ticker' });
+
+        if (error) console.error('Asset sync error:', error);
+    },
+
+    /* Store value history used for leaderboard queries */
+    savePortfolioSnapshot: async (userId, prices = {}, summary = {}) => {
+        const { cash, holdings, initialCash } = get();
+        const portfolioValue = summary.portfolioValue ?? get().getPortfolioValue(prices);
+        const stockValue = summary.stockValue ?? Math.max(0, portfolioValue - cash);
+        const totalReturn = summary.totalReturn ?? (initialCash !== 0 ? ((portfolioValue - initialCash) / initialCash) * 100 : 0);
+
+        const { error } = await supabase
+            .from('portfolio_snapshots')
+            .insert({
+                user_id: userId,
+                portfolio_value: portfolioValue,
+                cash,
+                stock_value: stockValue,
+                total_return: totalReturn,
+                holdings,
+                created_at: summary.createdAt || new Date().toISOString(),
+            });
+
+        if (error) console.error('Portfolio snapshot error:', error);
+    },
+
     /* Submit current performance to Supabase leaderboard */
     submitToLeaderboard: async (prices) => {
         if (!isSupabaseConfigured()) return;
@@ -295,17 +370,18 @@ export const usePortfolioStore = create((set, get) => ({
             const totalValue = get().getPortfolioValue(prices);
             const { initialCash, transactions } = get();
             const totalReturn = initialCash !== 0 ? ((totalValue - initialCash) / initialCash) * 100 : 0;
-            
-            const entry = {
-                user_id: user.id,
-                user_name: user.user_metadata?.display_name || user.email.split('@')[0],
-                portfolio_value: totalValue,
-                total_return: totalReturn,
-                trade_count: transactions.length,
-                updated_at: new Date().toISOString()
-            };
+            const now = new Date().toISOString();
 
-            await supabase.from('leaderboard_entries').upsert(entry, { onConflict: 'user_id' });
+            await get().syncAssetsToSupabase(user.id, prices, now);
+            await get().savePortfolioSnapshot(user.id, prices, {
+                portfolioValue: totalValue,
+                stockValue: Math.max(0, totalValue - get().cash),
+                totalReturn,
+                createdAt: now,
+            });
+
+            const { useLeaderboardStore } = await import('./leaderboardStore');
+            await useLeaderboardStore.getState().submitScore(totalValue, totalReturn, transactions.length);
         } catch (err) {
             console.error('Leaderboard submission error:', err);
         }

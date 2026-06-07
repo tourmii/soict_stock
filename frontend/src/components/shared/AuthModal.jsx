@@ -41,8 +41,8 @@ export default function AuthModal({ isOpen, onClose }) {
     clearError();
   };
 
-  const switchMode = () => {
-    setMode(mode === 'login' ? 'signup' : 'login');
+  const switchMode = (nextMode) => {
+    setMode(nextMode);
     clearError();
     setSuccessMsg('');
   };
@@ -79,10 +79,10 @@ export default function AuthModal({ isOpen, onClose }) {
 
         {/* Tab switcher */}
         <div className="auth-tabs">
-          <button className={`auth-tab ${mode === 'login' ? 'auth-tab--active' : ''}`} onClick={() => switchMode()}>
+          <button type="button" className={`auth-tab ${mode === 'login' ? 'auth-tab--active' : ''}`} onClick={() => switchMode('login')}>
             Sign In
           </button>
-          <button className={`auth-tab ${mode === 'signup' ? 'auth-tab--active' : ''}`} onClick={() => switchMode()}>
+          <button type="button" className={`auth-tab ${mode === 'signup' ? 'auth-tab--active' : ''}`} onClick={() => switchMode('signup')}>
             Sign Up
           </button>
         </div>

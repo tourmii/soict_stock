@@ -1,29 +1,9 @@
 -- ============================================
--- SoictStock Supabase Database Schema
--- Run this in the Supabase SQL Editor
+-- SoictStock persistence migration
+-- Adds normalized orders/assets/snapshots and leaderboard query source.
+-- Run this once in the Supabase SQL Editor.
 -- ============================================
 
--- User Profiles (extends Supabase auth.users)
-CREATE TABLE IF NOT EXISTS user_profiles (
-  id UUID REFERENCES auth.users(id) ON DELETE CASCADE PRIMARY KEY,
-  email TEXT NOT NULL,
-  display_name TEXT NOT NULL DEFAULT 'Trader',
-  avatar_url TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Portfolios
-CREATE TABLE IF NOT EXISTS portfolios (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL UNIQUE,
-  cash NUMERIC NOT NULL DEFAULT 150000,
-  initial_cash NUMERIC NOT NULL DEFAULT 150000,
-  holdings JSONB NOT NULL DEFAULT '{}',
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Current Assets / Holdings
 CREATE TABLE IF NOT EXISTS portfolio_assets (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
@@ -38,7 +18,6 @@ CREATE TABLE IF NOT EXISTS portfolio_assets (
   UNIQUE(user_id, ticker)
 );
 
--- Portfolio Value History
 CREATE TABLE IF NOT EXISTS portfolio_snapshots (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
@@ -50,7 +29,6 @@ CREATE TABLE IF NOT EXISTS portfolio_snapshots (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- All user orders, including pending/cancelled orders
 CREATE TABLE IF NOT EXISTS orders (
   id TEXT PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
@@ -64,112 +42,47 @@ CREATE TABLE IF NOT EXISTS orders (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Transactions
-CREATE TABLE IF NOT EXISTS transactions (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  order_id TEXT REFERENCES orders(id) ON DELETE SET NULL,
-  type TEXT NOT NULL CHECK (type IN ('Buy', 'Sell')),
-  ticker TEXT NOT NULL,
-  order_type TEXT NOT NULL DEFAULT 'Market',
-  quantity INTEGER NOT NULL,
-  price NUMERIC NOT NULL,
-  total NUMERIC NOT NULL,
-  status TEXT NOT NULL DEFAULT 'Filled',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
 ALTER TABLE transactions ADD COLUMN IF NOT EXISTS order_id TEXT REFERENCES orders(id) ON DELETE SET NULL;
 
--- Watchlists
-CREATE TABLE IF NOT EXISTS watchlists (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL UNIQUE,
-  tickers TEXT[] NOT NULL DEFAULT ARRAY['SCT', 'INNO', 'NXTG', 'HEAL', 'GRN'],
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Leaderboard Entries
-CREATE TABLE IF NOT EXISTS leaderboard_entries (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  display_name TEXT NOT NULL,
-  portfolio_value NUMERIC NOT NULL DEFAULT 150000,
-  total_return NUMERIC NOT NULL DEFAULT 0,
-  sharpe_ratio NUMERIC NOT NULL DEFAULT 0,
-  trades_count INTEGER NOT NULL DEFAULT 0,
-  period TEXT NOT NULL DEFAULT 'weekly' CHECK (period IN ('daily', 'weekly', 'monthly', 'all-time')),
-  updated_at TIMESTAMPTZ DEFAULT NOW(),
-  UNIQUE(user_id, period)
-);
-
--- ============================================
--- Row Level Security (RLS)
--- ============================================
-
-ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE portfolios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE portfolio_assets ENABLE ROW LEVEL SECURITY;
 ALTER TABLE portfolio_snapshots ENABLE ROW LEVEL SECURITY;
 ALTER TABLE orders ENABLE ROW LEVEL SECURITY;
-ALTER TABLE transactions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE watchlists ENABLE ROW LEVEL SECURITY;
-ALTER TABLE leaderboard_entries ENABLE ROW LEVEL SECURITY;
 
--- User Profiles: users can read/write their own profile, read others' display_name
-CREATE POLICY "Users can view own profile" ON user_profiles FOR SELECT USING (auth.uid() = id);
-CREATE POLICY "Users can update own profile" ON user_profiles FOR UPDATE USING (auth.uid() = id);
-CREATE POLICY "Users can insert own profile" ON user_profiles FOR INSERT WITH CHECK (auth.uid() = id);
-
--- Portfolios: private to user
-CREATE POLICY "Users can view own portfolio" ON portfolios FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can update own portfolio" ON portfolios FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own portfolio" ON portfolios FOR INSERT WITH CHECK (auth.uid() = user_id);
-
--- Assets: private to user
+DROP POLICY IF EXISTS "Users can view own assets" ON portfolio_assets;
+DROP POLICY IF EXISTS "Users can update own assets" ON portfolio_assets;
+DROP POLICY IF EXISTS "Users can insert own assets" ON portfolio_assets;
+DROP POLICY IF EXISTS "Users can delete own assets" ON portfolio_assets;
 CREATE POLICY "Users can view own assets" ON portfolio_assets FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can update own assets" ON portfolio_assets FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own assets" ON portfolio_assets FOR INSERT WITH CHECK (auth.uid() = user_id);
 CREATE POLICY "Users can delete own assets" ON portfolio_assets FOR DELETE USING (auth.uid() = user_id);
 
--- Portfolio snapshots: users can write their own, everyone can read aggregate leaderboard source data via views
+DROP POLICY IF EXISTS "Users can view own snapshots" ON portfolio_snapshots;
+DROP POLICY IF EXISTS "Users can insert own snapshots" ON portfolio_snapshots;
 CREATE POLICY "Users can view own snapshots" ON portfolio_snapshots FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own snapshots" ON portfolio_snapshots FOR INSERT WITH CHECK (auth.uid() = user_id);
 
--- Orders: private to user
+DROP POLICY IF EXISTS "Users can view own orders" ON orders;
+DROP POLICY IF EXISTS "Users can update own orders" ON orders;
+DROP POLICY IF EXISTS "Users can insert own orders" ON orders;
 CREATE POLICY "Users can view own orders" ON orders FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Users can update own orders" ON orders FOR UPDATE USING (auth.uid() = user_id);
 CREATE POLICY "Users can insert own orders" ON orders FOR INSERT WITH CHECK (auth.uid() = user_id);
-
--- Transactions: private to user
-CREATE POLICY "Users can view own transactions" ON transactions FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own transactions" ON transactions FOR INSERT WITH CHECK (auth.uid() = user_id);
-
--- Watchlists: private to user
-CREATE POLICY "Users can view own watchlist" ON watchlists FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Users can update own watchlist" ON watchlists FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own watchlist" ON watchlists FOR INSERT WITH CHECK (auth.uid() = user_id);
-
--- Leaderboard: everyone can read, users can write their own
-CREATE POLICY "Anyone can view leaderboard" ON leaderboard_entries FOR SELECT USING (true);
-CREATE POLICY "Users can update own leaderboard" ON leaderboard_entries FOR UPDATE USING (auth.uid() = user_id);
-CREATE POLICY "Users can insert own leaderboard" ON leaderboard_entries FOR INSERT WITH CHECK (auth.uid() = user_id);
-
--- ============================================
--- Auto-create profile & portfolio on signup
--- ============================================
 
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
   INSERT INTO public.user_profiles (id, email, display_name)
-  VALUES (NEW.id, NEW.email, COALESCE(NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1)));
+  VALUES (NEW.id, NEW.email, COALESCE(NEW.raw_user_meta_data->>'display_name', split_part(NEW.email, '@', 1)))
+  ON CONFLICT (id) DO NOTHING;
 
   INSERT INTO public.portfolios (user_id, cash, initial_cash, holdings)
-  VALUES (NEW.id, 150000, 150000, '{}');
+  VALUES (NEW.id, 150000, 150000, '{}')
+  ON CONFLICT (user_id) DO NOTHING;
 
   INSERT INTO public.watchlists (user_id, tickers)
-  VALUES (NEW.id, ARRAY['SCT', 'INNO', 'NXTG', 'HEAL', 'GRN']);
+  VALUES (NEW.id, ARRAY['SCT', 'INNO', 'NXTG', 'HEAL', 'GRN'])
+  ON CONFLICT (user_id) DO NOTHING;
 
   INSERT INTO public.leaderboard_entries (user_id, display_name, portfolio_value, total_return, sharpe_ratio, trades_count, period)
   VALUES
@@ -183,11 +96,6 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE OR REPLACE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
-
--- Query source for rebuilding leaderboard from stored user data.
 CREATE OR REPLACE VIEW public.leaderboard_source AS
 WITH latest_snapshots AS (
   SELECT DISTINCT ON (user_id)
@@ -248,13 +156,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- ============================================
--- Indexes
--- ============================================
-
-CREATE INDEX IF NOT EXISTS idx_transactions_user ON transactions(user_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_created ON transactions(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_orders_user_status ON orders(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_assets_user ON portfolio_assets(user_id);
 CREATE INDEX IF NOT EXISTS idx_snapshots_user_created ON portfolio_snapshots(user_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_leaderboard_period ON leaderboard_entries(period, portfolio_value DESC);
+
+SELECT public.refresh_leaderboard_entries();

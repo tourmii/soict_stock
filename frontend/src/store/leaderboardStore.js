@@ -79,19 +79,26 @@ export const useLeaderboardStore = create((set, get) => ({
         .single();
 
       const displayName = profile?.display_name || user.email?.split('@')[0] || 'Trader';
+      const updatedAt = new Date().toISOString();
+      const rows = ['daily', 'weekly', 'monthly', 'all-time'].map((period) => ({
+        user_id: user.id,
+        display_name: displayName,
+        portfolio_value: portfolioValue,
+        total_return: totalReturn,
+        sharpe_ratio: 0,
+        trades_count: tradesCount,
+        period,
+        updated_at: updatedAt,
+      }));
 
-      await supabase
+      const { error } = await supabase
         .from('leaderboard_entries')
-        .upsert({
-          user_id: user.id,
-          display_name: displayName,
-          portfolio_value: portfolioValue,
-          total_return: totalReturn,
-          sharpe_ratio: 0,
-          trades_count: tradesCount,
-          period: 'all-time',
-          updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,period' });
+        .upsert(rows, { onConflict: 'user_id,period' });
+
+      if (error) {
+        console.error('Score submit error:', error);
+        return;
+      }
 
       // Refresh leaderboard
       await get().fetchFromSupabase();
