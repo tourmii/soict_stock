@@ -52,11 +52,6 @@ async function main() {
   app.use('/api/auth', authRoutes);
   app.use('/api/learning', learningRoutes);
 
-  // Health check
-  app.use('/api/advisor',     advisorRoutes);
-  app.use('/api/scenarios',   scenarioRoutes);
-  app.use('/api/news',        newsRoutes);
-  app.use('/api/auth',        authRoutes);
   app.get('/api/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
 
   // Set up WebSocket BEFORE starting the HTTP server so priceStream is wired
