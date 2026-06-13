@@ -27,6 +27,7 @@ export async function connectDB() {
   await db.collection('leaderboard').createIndex({ portfolioValue: -1 });
   await db.collection('news').createIndex({ timestamp: -1 });
   await db.collection('users').createIndex({ email: 1 }, { unique: true });
+  await db.collection('learning_progress').createIndex({ userId: 1 }, { unique: true });
 
   console.log(`✅ Connected to MongoDB: ${DB_NAME}`);
   return db;
