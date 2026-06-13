@@ -11,18 +11,25 @@ router.get('/stocks', (req, res) => {
   res.json(stocks);
 });
 
-router.get('/history/:ticker', (req, res) => {
+router.get('/history/:ticker', async (req, res) => {
   const engine = req.app.locals.engine;
   const { ticker } = req.params;
   const { timeframe = 'All' } = req.query;
-  const history = engine.histories[ticker];
-  if (!history) return res.status(404).json({ message: 'Ticker not found' });
 
-  const now = Math.floor(Date.now() / 1000);
-  const ranges = { '1D': 86400, '1W': 604800, '1M': 2592000, '3M': 7776000, '1Y': 31536000, 'All': Infinity };
-  const cutoff = now - (ranges[timeframe] || Infinity);
-  const filtered = history.filter((bar) => bar.time >= cutoff);
-  res.json(filtered);
+  try {
+    const ticks = await engine.getTickHistory(ticker);
+    if (!ticks || ticks.length === 0) {
+      return res.status(404).json({ message: 'Ticker not found' });
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const ranges = { '1D': 86400, '1W': 604800, '1M': 2592000, '3M': 7776000, '1Y': 31536000, 'All': Infinity };
+    const cutoff = now - (ranges[timeframe] || Infinity);
+    const filtered = ticks.filter((bar) => bar.time >= cutoff);
+    res.json(filtered);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 router.get('/quote/:ticker', (req, res) => {

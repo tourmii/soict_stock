@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { STOCKS } from '../lib/constants';
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
 
 /* ── GBM Price Simulation (client-side fallback) ────────────── */
 function boxMuller() {
@@ -9,12 +8,23 @@ function boxMuller() {
   return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
 }
 
-function nextPrice(price, drift, volatility, dt = 1 / 252) {
+function nextPrice(price, drift, volatility, dt = 1 / (252 * 78), basePrice = null) {
+  let effectiveDrift = drift;
+  // Soft mean reversion toward base price
+  if (basePrice && basePrice > 0) {
+    const logDev = Math.log(price / basePrice);
+    effectiveDrift -= 0.02 * logDev * 252 * dt;
+  }
   const z = boxMuller();
-  return price * Math.exp((drift - 0.5 * volatility ** 2) * dt + volatility * Math.sqrt(dt) * z);
+  let next = price * Math.exp((effectiveDrift - 0.5 * volatility ** 2) * dt + volatility * Math.sqrt(dt) * z);
+  // Clamp to ±60% of base
+  if (basePrice) {
+    next = Math.max(basePrice * 0.4, Math.min(basePrice * 1.6, next));
+  }
+  return Math.max(0.01, next);
 }
 
-/* ── Generate initial 5-min tick data ────────────── */
+/* ── Generate initial 5-min tick data (fallback only) ────────────── */
 function generateInitialData() {
   const prices = {};
   const prevPrices = {};
@@ -22,21 +32,21 @@ function generateInitialData() {
 
   for (const stock of STOCKS) {
     const ticks = [];
-    let price = stock.basePrice * (0.7 + Math.random() * 0.3);
+    let price = stock.basePrice * (0.92 + Math.random() * 0.16);
     const now = Math.floor(Date.now() / 1000);
-    const intervalSec = 300; // 5 minutes
-    const ticksPerDay = 288;
+    const intervalSec = 300;
+    const barsPerDay = 78;
     const days = 90;
-    const totalTicks = days * ticksPerDay;
+    const totalTicks = days * barsPerDay;
     const startTime = now - totalTicks * intervalSec;
-    const dt = 1 / (252 * ticksPerDay);
+    const dt = 1 / (252 * barsPerDay);
 
     for (let i = 0; i <= totalTicks; i++) {
-      price = i === 0 ? price : nextPrice(price, stock.drift, stock.volatility, dt);
+      price = i === 0 ? price : nextPrice(price, stock.drift, stock.volatility, dt, stock.basePrice);
       ticks.push({
         time: startTime + i * intervalSec,
-        price,
-        volume: Math.floor(200 + Math.random() * 2000),
+        price: Math.round(price * 100) / 100,
+        volume: Math.floor(500 + Math.random() * 3000),
       });
     }
 
@@ -91,8 +101,6 @@ const INTERVAL_SECONDS = {
   '1M': 2592000,
 };
 
-/* ── Supabase helpers ────────────── */
-
 const initialData = generateInitialData();
 
 /* ── Store ────────────── */
@@ -104,7 +112,7 @@ export const useMarketStore = create((set, get) => ({
   regime: 'normal',
   activeScenario: null,
   selectedTicker: 'SCT',
-  watchlist: ['SCT', 'INNO', 'NXTG', 'HEAL', 'GRN'],
+  watchlist: ['SCT', 'INNO', 'NXTG', 'HEAL', 'GRN', 'FINI', 'TECH'],
   news: [],
   isConnected: false,
 
@@ -145,7 +153,6 @@ export const useMarketStore = create((set, get) => ({
     if (!watchlist.includes(ticker)) {
       const updated = [...watchlist, ticker];
       set({ watchlist: updated });
-      get().syncWatchlistToSupabase(updated);
     }
   },
 
@@ -153,7 +160,6 @@ export const useMarketStore = create((set, get) => ({
     const { watchlist } = get();
     const updated = watchlist.filter((t) => t !== ticker);
     set({ watchlist: updated });
-    get().syncWatchlistToSupabase(updated);
   },
 
   setConnected: (connected) => set({ isConnected: connected }),
@@ -184,16 +190,18 @@ export const useMarketStore = create((set, get) => ({
     const newPrevPrices = {};
     const newRawTicks = { ...rawTicks };
     const now = Math.floor(Date.now() / 1000);
+    // Same tiny dt as backend: 3s / (252 * 6.5h trading day in seconds)
+    const realtimeDt = 3 / (252 * 6.5 * 3600);
 
     for (const stock of stocks) {
       const oldPrice = prices[stock.ticker];
       if (oldPrice === undefined) continue;
 
-      const newPrice = nextPrice(oldPrice, stock.drift, stock.volatility);
+      const newPrice = nextPrice(oldPrice, stock.drift, stock.volatility, realtimeDt, stock.basePrice);
       newPrevPrices[stock.ticker] = oldPrice;
-      newPrices[stock.ticker] = newPrice;
+      newPrices[stock.ticker] = Math.round(newPrice * 100) / 100;
 
-      const tick = { time: now, price: newPrice, volume: Math.floor(200 + Math.random() * 2000) };
+      const tick = { time: now, price: newPrices[stock.ticker], volume: Math.floor(500 + Math.random() * 3000) };
       newRawTicks[stock.ticker] = [...(rawTicks[stock.ticker] || []), tick];
     }
 
@@ -227,37 +235,5 @@ export const useMarketStore = create((set, get) => ({
     }
 
     return histories;
-  },
-
-  /* Supabase sync for watchlist */
-  syncWatchlistToSupabase: async (watchlist) => {
-    if (!isSupabaseConfigured()) return;
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      await supabase
-        .from('user_profiles')
-        .upsert({ id: user.id, watchlist }, { onConflict: 'id' });
-    } catch (err) {
-      console.error('Watchlist sync error:', err);
-    }
-  },
-
-  loadWatchlistFromSupabase: async () => {
-    if (!isSupabaseConfigured()) return;
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase
-        .from('user_profiles')
-        .select('watchlist')
-        .eq('id', user.id)
-        .single();
-      if (data?.watchlist) {
-        set({ watchlist: data.watchlist });
-      }
-    } catch (err) {
-      console.error('Watchlist load error:', err);
-    }
   },
 }));

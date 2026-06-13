@@ -1,18 +1,33 @@
+/**
+ * WebSocket Price Stream — sends unified tick data to all clients
+ */
 export function setupPriceStream(wss, engine) {
   const clients = new Set();
 
-  wss.on('connection', (ws) => {
+  wss.on('connection', async (ws) => {
     clients.add(ws);
     console.log(` WebSocket client connected (${clients.size} total)`);
 
     // Send full tick history so all clients have consistent price data
-    ws.send(JSON.stringify({
-      type: 'init',
-      data: {
-        prices: engine.prices,
-        rawTicks: engine.rawTicks,
-      },
-    }));
+    try {
+      const rawTicks = await engine.getAllTickHistory();
+      ws.send(JSON.stringify({
+        type: 'init',
+        data: {
+          prices: engine.prices,
+          rawTicks,
+        },
+      }));
+    } catch (err) {
+      console.error('Error sending init data:', err.message);
+      ws.send(JSON.stringify({
+        type: 'init',
+        data: {
+          prices: engine.prices,
+          rawTicks: {},
+        },
+      }));
+    }
 
     ws.on('close', () => {
       clients.delete(ws);

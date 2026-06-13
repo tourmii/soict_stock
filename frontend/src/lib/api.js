@@ -6,13 +6,21 @@ async function request(url, options = {}) {
     ...options,
   });
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ message: 'Request failed' }));
-    throw new Error(error.message || `HTTP ${res.status}`);
+    const body = await res.json().catch(() => ({ message: 'Request failed' }));
+    throw new Error(body.error || body.message || `HTTP ${res.status}`);
   }
   return res.json();
 }
 
 export const api = {
+  /* Auth */
+  signUp: (email, password, displayName) =>
+    request('/auth/signup', { method: 'POST', body: JSON.stringify({ email, password, displayName }) }),
+  signIn: (email, password) =>
+    request('/auth/signin', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  getProfile: (userId) => request(`/auth/profile?userId=${userId}`),
+  updateProfile: (userId, displayName) =>
+    request('/auth/profile', { method: 'PUT', body: JSON.stringify({ userId, displayName }) }),
   /* Market */
   getStocks: () => request('/market/stocks'),
   getHistory: (ticker, timeframe) => request(`/market/history/${ticker}?timeframe=${timeframe}`),
@@ -24,9 +32,10 @@ export const api = {
   cancelOrder: (id) => request(`/orders/${id}`, { method: 'DELETE' }),
 
   /* Portfolio */
-  getPortfolio: () => request('/portfolio'),
-  getPortfolioHistory: () => request('/portfolio/history'),
-  getRiskMetrics: () => request('/portfolio/risk'),
+  getPortfolio: (userId = 'default') => request(`/portfolio?userId=${userId}`),
+  getPortfolioHistory: (userId = 'default') => request(`/portfolio/history?userId=${userId}`),
+  getRiskMetrics: (userId = 'default') => request(`/portfolio/risk?userId=${userId}`),
+  executeTrade: (trade) => request('/portfolio/trade', { method: 'POST', body: JSON.stringify(trade) }),
 
   /* Leaderboard */
   getLeaderboard: (period) => request(`/leaderboard?period=${period}`),
@@ -43,5 +52,5 @@ export const api = {
   deactivateScenario: () => request('/scenarios/deactivate', { method: 'POST' }),
 
   /* Backtest */
-  runBacktest: (strategy) => request('/backtest', { method: 'POST', body: JSON.stringify(strategy) }),
+  runBacktest: (strategy) => request('/advisor/backtest', { method: 'POST', body: JSON.stringify(strategy) }),
 };

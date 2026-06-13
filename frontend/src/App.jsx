@@ -23,16 +23,15 @@ function App() {
   const injectNews = useNewsStore((s) => s.injectNews);
   const fetchFromBackend = useNewsStore((s) => s.fetchFromBackend);
   const checkOrders = useOrderStore((s) => s.checkOrders);
-  const loadOpenOrders = useOrderStore((s) => s.loadFromSupabase);
+  const loadOpenOrders = useOrderStore((s) => s.loadFromBackend);
   const buy = usePortfolioStore((s) => s.buy);
   const sell = usePortfolioStore((s) => s.sell);
   const recordSnapshot = usePortfolioStore((s) => s.recordSnapshot);
-  const loadFromSupabase = usePortfolioStore((s) => s.loadFromSupabase);
-  const fetchLeaderboard = useLeaderboardStore((s) => s.fetchFromSupabase);
+  const loadPortfolio = usePortfolioStore((s) => s.loadFromBackend);
+  const fetchLeaderboard = useLeaderboardStore((s) => s.fetchFromBackend);
 
   const updatePrices = useMarketStore((s) => s.updatePrices);
   const initFromServer = useMarketStore((s) => s.initFromServer);
-  const loadWatchlistFromSupabase = useMarketStore((s) => s.loadWatchlistFromSupabase);
   const isConnected = useMarketStore((s) => s.isConnected);
   const setConnected = useMarketStore((s) => s.setConnected);
 
@@ -44,13 +43,12 @@ function App() {
     initializeAuth();
   }, []);
 
-  // Load user data from Supabase when auth state changes
+  // Load user data when auth state changes
   useEffect(() => {
+    fetchLeaderboard();
     if (user) {
-      loadFromSupabase(prices);
+      loadPortfolio(prices);
       loadOpenOrders();
-      loadWatchlistFromSupabase();
-      fetchLeaderboard();
     }
   }, [user]);
 

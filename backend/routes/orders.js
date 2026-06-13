@@ -1,25 +1,45 @@
 import { Router } from 'express';
 const router = Router();
 
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const orderBook = req.app.locals.orderBook;
-  const { type, ticker, orderType, quantity, price } = req.body;
+  const { type, ticker, orderType, quantity, price, userId } = req.body;
   if (!type || !ticker || !orderType || !quantity) {
     return res.status(400).json({ message: 'Missing required fields' });
   }
-  const order = orderBook.placeOrder({ type, ticker, orderType, quantity: parseInt(quantity), price: parseFloat(price) || undefined });
-  res.json(order);
+  try {
+    const order = await orderBook.placeOrder({
+      type, ticker, orderType,
+      quantity: parseInt(quantity),
+      price: parseFloat(price) || undefined,
+      userId: userId || 'default',
+    });
+    res.json(order);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const orderBook = req.app.locals.orderBook;
-  res.json({ open: orderBook.getOpenOrders(), filled: orderBook.getFilledOrders() });
+  const userId = req.query.userId || null;
+  try {
+    const open = await orderBook.getOpenOrders(userId);
+    const filled = await orderBook.getFilledOrders(userId);
+    res.json({ open, filled });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
-router.delete('/:id', (req, res) => {
+router.delete('/:id', async (req, res) => {
   const orderBook = req.app.locals.orderBook;
-  orderBook.cancelOrder(req.params.id);
-  res.json({ message: 'Order cancelled' });
+  try {
+    await orderBook.cancelOrder(req.params.id);
+    res.json({ message: 'Order cancelled' });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
 });
 
 export default router;
