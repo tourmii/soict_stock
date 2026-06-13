@@ -53,4 +53,15 @@ export const api = {
 
   /* Backtest */
   runBacktest: (strategy) => request('/advisor/backtest', { method: 'POST', body: JSON.stringify(strategy) }),
+
+  /* Learning */
+  getLearningProgress: (userId) => request(`/learning/progress?userId=${encodeURIComponent(userId)}`),
+  updateLearningProgress: (payload) =>
+    request('/learning/progress', { method: 'PUT', body: JSON.stringify(payload) }),
+  markLearningSection: (payload) =>
+    request('/learning/lesson/section', { method: 'POST', body: JSON.stringify(payload) }),
+  saveQuizResult: (payload) =>
+    request('/learning/quiz/result', { method: 'POST', body: JSON.stringify(payload) }),
+  resetLearningProgress: (userId) =>
+    request('/learning/reset', { method: 'POST', body: JSON.stringify({ userId }) }),
 };

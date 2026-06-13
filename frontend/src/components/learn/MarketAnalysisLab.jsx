@@ -8,10 +8,10 @@ import { ResponsiveContainer, AreaChart, Area, LineChart, Line, XAxis, YAxis, To
 export default function MarketAnalysisLab() {
   const [ticker, setTicker] = useState('SCT');
   const [activeIndicator, setActiveIndicator] = useState('overview');
-  const getHistories = useMarketStore((s) => s.getHistories);
+  const getOHLCV = useMarketStore((s) => s.getOHLCV);
+  const rawTicks = useMarketStore((s) => s.rawTicks);
   const prices = useMarketStore((s) => s.prices);
-  const histories = useMemo(() => getHistories(), [prices]);
-  const history = useMemo(() => histories[ticker] || [], [histories, ticker]);
+  const history = useMemo(() => getOHLCV(ticker, '1H'), [getOHLCV, rawTicks, ticker]);
   const closePrices = useMemo(() => history.map((h) => h.close), [history]);
   const stock = STOCKS.find((s) => s.ticker === ticker);
 
@@ -52,8 +52,9 @@ export default function MarketAnalysisLab() {
       if (rel > 0.8) { bbPosition = 'Near Upper'; bbColor = '#EF4444'; }
       else if (rel < 0.2) { bbPosition = 'Near Lower'; bbColor = '#22C55E'; }
     }
-    const chartData = history.slice(-90).map((h, i) => {
-      const idx = closePrices.length - 90 + i;
+    const chartStart = Math.max(0, history.length - 90);
+    const chartData = history.slice(chartStart).map((h, i) => {
+      const idx = chartStart + i;
       return { time: i, price: h.close, sma20: sma20[idx], sma50: sma50[idx], rsi: rsi[idx], macd: macd.macd[idx], signal: macd.signal[idx], bbUpper: bb.upper[idx], bbLower: bb.lower[idx], bbMiddle: bb.middle[idx], volume: h.volume };
     });
     return { trend, trendColor, cp, support, resistance, cRSI, rsiSignal, rsiColor, cMACD, cSig, macdSignal, macdColor, bU, bL, bbPosition, bbColor, s20, s50, s200, chartData };
