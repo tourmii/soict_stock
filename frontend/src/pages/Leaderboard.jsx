@@ -11,11 +11,11 @@ export default function Leaderboard() {
   const setPeriod = useLeaderboardStore((s) => s.setPeriod);
   const userRank = useLeaderboardStore((s) => s.userRank);
   const loaded = useLeaderboardStore((s) => s.loaded);
-  const fetchFromSupabase = useLeaderboardStore((s) => s.fetchFromSupabase);
+  const fetchFromBackend = useLeaderboardStore((s) => s.fetchFromBackend);
   const user = useAuthStore((s) => s.user);
 
   useEffect(() => {
-    fetchFromSupabase();
+    fetchFromBackend();
   }, []);
 
   const isEmpty = loaded && entries.length === 0;

@@ -4,6 +4,7 @@
  */
 
 import https from 'https';
+import { STOCK_SECTORS, SECTOR_TICKERS } from './stockData.js';
 
 // Keyword-to-stock mapping for the impact engine
 const SECTOR_KEYWORDS = {
@@ -28,17 +29,14 @@ const SECTOR_KEYWORDS = {
     'credit', 'loan', 'mortgage', 'Wall Street', 'SEC', 'regulation', 'IPO', 'stock market',
     'GDP', 'recession', 'unemployment', 'fiscal', 'monetary', 'treasury',
   ],
-};
-
-// Stock-to-sector map
-const STOCK_SECTORS = {
-  SCT: 'Technology',
-  INNO: 'Technology',
-  NXTG: 'Technology',
-  TECH: 'Technology',
-  HEAL: 'Healthcare',
-  GRN: 'Energy',
-  FINI: 'Finance',
+  Consumer: [
+    'retail', 'consumer', 'shopping', 'luxury', 'brand', 'entertainment', 'streaming',
+    'food', 'beverage', 'restaurant', 'e-commerce', 'fashion', 'apparel',
+  ],
+  Industrial: [
+    'industrial', 'manufacturing', 'aerospace', 'defense', 'construction', 'logistics',
+    'metals', 'mining', 'infrastructure', 'shipping', 'transportation',
+  ],
 };
 
 // Market-wide keywords that affect all stocks
@@ -85,14 +83,14 @@ function analyzeHeadline(title, description = '') {
     }
   }
 
-  // Map sectors to tickers
+  // Map sectors to tickers using the shared mapping
   const affectedTickers = [];
   if (isMarketWide) {
     affectedTickers.push(...Object.keys(STOCK_SECTORS));
   } else {
-    for (const [ticker, sector] of Object.entries(STOCK_SECTORS)) {
-      if (affectedSectors.has(sector)) {
-        affectedTickers.push(ticker);
+    for (const sector of affectedSectors) {
+      if (SECTOR_TICKERS[sector]) {
+        affectedTickers.push(...SECTOR_TICKERS[sector]);
       }
     }
   }

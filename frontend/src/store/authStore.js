@@ -1,6 +1,10 @@
 import { create } from 'zustand';
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
+import { api } from '../lib/api';
 
+/**
+ * Auth store — uses MongoDB backend for user authentication.
+ * Session token (userId) is stored in localStorage for persistence.
+ */
 export const useAuthStore = create((set, get) => ({
   user: null,
   session: null,
@@ -8,126 +12,89 @@ export const useAuthStore = create((set, get) => ({
   loading: true,
   error: null,
 
-  /* Initialize auth listener */
+  /* Initialize — check for stored session */
   initialize: async () => {
-    if (!isSupabaseConfigured()) {
-      set({ loading: false });
-      return;
-    }
-
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        set({ user: session.user, session });
-        await get().fetchProfile();
+      const storedUserId = localStorage.getItem('soict_userId');
+      if (storedUserId) {
+        // Validate session by fetching profile from backend
+        try {
+          const data = await api.getProfile(storedUserId);
+          const user = data.user;
+          set({ user, profile: user, session: { userId: user.id }, loading: false });
+        } catch {
+          // Stored session is invalid — clear it
+          localStorage.removeItem('soict_userId');
+          set({ loading: false });
+        }
+      } else {
+        set({ loading: false });
       }
     } catch (err) {
       console.error('Auth init error:', err);
-    } finally {
       set({ loading: false });
     }
-
-    supabase.auth.onAuthStateChange(async (event, session) => {
-      set({ user: session?.user || null, session: session || null });
-      if (session?.user) {
-        await get().fetchProfile();
-      } else {
-        set({ profile: null });
-      }
-    });
   },
 
   /* Fetch user profile */
   fetchProfile: async () => {
-    if (!isSupabaseConfigured()) return;
     const { user } = get();
     if (!user) return;
-
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select('*')
-      .eq('id', user.id)
-      .single();
-
-    if (data) set({ profile: data });
-    if (error) console.error('Profile fetch error:', error);
+    try {
+      const data = await api.getProfile(user.id);
+      set({ profile: data.user });
+    } catch (err) {
+      console.error('Profile fetch error:', err);
+    }
   },
 
-  /* Sign up with email/password */
+  /* Sign up — create account via backend */
   signUp: async (email, password, displayName) => {
-    if (!isSupabaseConfigured()) {
-      set({ error: 'Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env' });
-      return { error: { message: 'Supabase not configured' } };
-    }
-
     set({ loading: true, error: null });
-
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { display_name: displayName || email.split('@')[0] },
-      },
-    });
-
-    if (error) {
-      const message = error.message?.toLowerCase().includes('email rate limit')
-        ? 'Supabase email rate limit exceeded. Wait before trying again, or disable email confirmations in Supabase Auth settings for local testing.'
-        : error.message;
-      set({ error: message, loading: false });
-      return { error };
+    try {
+      const data = await api.signUp(email, password, displayName);
+      const user = data.user;
+      localStorage.setItem('soict_userId', user.id);
+      set({ user, profile: user, session: { userId: user.id }, loading: false });
+      return { data: { user } };
+    } catch (err) {
+      const msg = err.message || 'Sign up failed';
+      set({ error: msg, loading: false });
+      return { error: { message: msg } };
     }
-
-    set({ user: data.user, session: data.session, loading: false });
-    return { data };
   },
 
-  /* Sign in with email/password */
+  /* Sign in — authenticate via backend */
   signIn: async (email, password) => {
-    if (!isSupabaseConfigured()) {
-      set({ error: 'Supabase is not configured. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in .env' });
-      return { error: { message: 'Supabase not configured' } };
-    }
-
     set({ loading: true, error: null });
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      set({ error: error.message, loading: false });
-      return { error };
+    try {
+      const data = await api.signIn(email, password);
+      const user = data.user;
+      localStorage.setItem('soict_userId', user.id);
+      set({ user, profile: user, session: { userId: user.id }, loading: false });
+      return { data: { user } };
+    } catch (err) {
+      const msg = err.message || 'Sign in failed';
+      set({ error: msg, loading: false });
+      return { error: { message: msg } };
     }
-
-    set({ user: data.user, session: data.session, loading: false });
-    return { data };
   },
 
   /* Sign out */
   signOut: async () => {
-    if (!isSupabaseConfigured()) return;
-
-    await supabase.auth.signOut();
+    localStorage.removeItem('soict_userId');
     set({ user: null, session: null, profile: null, error: null });
   },
 
   /* Update display name */
   updateDisplayName: async (displayName) => {
-    if (!isSupabaseConfigured()) return;
     const { user } = get();
     if (!user) return;
-
-    const { error } = await supabase
-      .from('user_profiles')
-      .update({ display_name: displayName, updated_at: new Date().toISOString() })
-      .eq('id', user.id);
-
-    if (!error) {
-      set((s) => ({
-        profile: { ...s.profile, display_name: displayName },
-      }));
+    try {
+      const data = await api.updateProfile(user.id, displayName);
+      set({ user: data.user, profile: data.user });
+    } catch (err) {
+      console.error('Profile update error:', err);
     }
   },
 

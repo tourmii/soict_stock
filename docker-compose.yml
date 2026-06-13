@@ -1,6 +1,14 @@
 version: '3.8'
 
 services:
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+
   backend:
     build: 
       context: ./backend
@@ -12,6 +20,9 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3001
+      - MONGODB_URI=mongodb://mongodb:27017
+    depends_on:
+      - mongodb
     restart: unless-stopped
 
   frontend:
@@ -25,3 +36,6 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+
+volumes:
+  mongo_data:

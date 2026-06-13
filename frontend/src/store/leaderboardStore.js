@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { supabase, isSupabaseConfigured } from '../lib/supabaseClient';
+import { api } from '../lib/api';
 
 export const useLeaderboardStore = create((set, get) => ({
   entries: [],
@@ -9,101 +9,38 @@ export const useLeaderboardStore = create((set, get) => ({
 
   setPeriod: (period) => {
     set({ period });
-    get().fetchFromSupabase();
+    get().fetchFromBackend();
   },
 
   setEntries: (entries) => set({ entries }),
 
-  /* Fetch leaderboard from Supabase */
-  fetchFromSupabase: async () => {
-    if (!isSupabaseConfigured()) {
-      set({ loaded: true });
-      return;
-    }
-
+  /* Fetch leaderboard from backend API */
+  fetchFromBackend: async () => {
     try {
       const { period } = get();
-      const { data, error } = await supabase
-        .from('leaderboard_entries')
-        .select('*')
-        .eq('period', period)
-        .order('portfolio_value', { ascending: false })
-        .limit(50);
-
-      if (error) {
-        console.error('Leaderboard fetch error:', error);
-        set({ loaded: true });
-        return;
-      }
+      const data = await api.getLeaderboard(period);
 
       const entries = (data || []).map((row, i) => ({
-        rank: i + 1,
-        userId: row.user_id,
-        name: row.display_name,
-        portfolio: row.portfolio_value,
-        return: row.total_return,
-        sharpe: row.sharpe_ratio || 0,
+        rank: row.rank || i + 1,
+        userId: row.userId,
+        name: row.name || 'Anonymous',
+        portfolio: row.portfolio || 0,
+        return: row.return || 0,
+        sharpe: row.sharpe || 0,
         badge: null,
-        trades: row.trades_count || 0,
+        trades: row.trades || 0,
       }));
 
-      // Find current user rank
-      let userRank = null;
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user) {
-          const idx = entries.findIndex((e) => e.userId === user.id);
-          userRank = idx >= 0 ? idx + 1 : null;
-        }
-      } catch (_) {}
-
-      set({ entries, userRank, loaded: true });
+      set({ entries, loaded: true });
     } catch (err) {
       console.error('Leaderboard fetch error:', err);
       set({ loaded: true });
     }
   },
 
-  /* Submit user score */
+  /* Submit user score — handled server-side during trades */
   submitScore: async (portfolioValue, totalReturn, tradesCount) => {
-    if (!isSupabaseConfigured()) return;
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('display_name')
-        .eq('id', user.id)
-        .single();
-
-      const displayName = profile?.display_name || user.email?.split('@')[0] || 'Trader';
-      const updatedAt = new Date().toISOString();
-      const rows = ['daily', 'weekly', 'monthly', 'all-time'].map((period) => ({
-        user_id: user.id,
-        display_name: displayName,
-        portfolio_value: portfolioValue,
-        total_return: totalReturn,
-        sharpe_ratio: 0,
-        trades_count: tradesCount,
-        period,
-        updated_at: updatedAt,
-      }));
-
-      const { error } = await supabase
-        .from('leaderboard_entries')
-        .upsert(rows, { onConflict: 'user_id,period' });
-
-      if (error) {
-        console.error('Score submit error:', error);
-        return;
-      }
-
-      // Refresh leaderboard
-      await get().fetchFromSupabase();
-    } catch (err) {
-      console.error('Score submit error:', err);
-    }
+    // Score is now submitted automatically by the backend during trade execution
+    // This method is kept for API compatibility
   },
 }));

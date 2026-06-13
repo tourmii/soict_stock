@@ -1,3 +1,7 @@
+/**
+ * News Injector — persists news to MongoDB
+ */
+import { getDb } from './db.js';
 import { NewsService, analyzeHeadline } from './newsService.js';
 
 const FALLBACK_TEMPLATES = [
@@ -82,6 +86,18 @@ export class NewsInjector {
     this.news.unshift(newsItem);
     if (this.news.length > 50) this.news = this.news.slice(0, 50);
 
+    // Persist to MongoDB
+    try {
+      const db = getDb();
+      await db.collection('news').insertOne({
+        ...newsItem,
+        _id: newsItem.id,
+      });
+    } catch (err) {
+      // Ignore duplicate key errors
+      if (err.code !== 11000) console.error('News insert error:', err.message);
+    }
+
     // Periodically refresh real news
     if (this.realNewsUsed.size >= realArticles.length) {
       this.realNewsUsed.clear();
@@ -132,7 +148,21 @@ export class NewsInjector {
     return newsItem;
   }
 
-  getNews(limit = 20) {
-    return this.news.slice(0, limit);
+  async getNews(limit = 20) {
+    // Return from in-memory cache first, fall back to DB
+    if (this.news.length > 0) {
+      return this.news.slice(0, limit);
+    }
+    try {
+      const db = getDb();
+      const news = await db.collection('news')
+        .find()
+        .sort({ timestamp: -1 })
+        .limit(limit)
+        .toArray();
+      return news;
+    } catch {
+      return [];
+    }
   }
 }
