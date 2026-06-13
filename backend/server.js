@@ -17,6 +17,7 @@ import scenarioRoutes from './routes/scenarios.js';
 import newsRoutes from './routes/news.js';
 import authRoutes from './routes/auth.js';
 import learningRoutes from './routes/learning.js';
+import chatbotRoutes from './routes/chatbot.js';
 import { setupPriceStream } from './websocket/priceStream.js';
 
 async function main() {
@@ -51,6 +52,7 @@ async function main() {
   app.use('/api/news', newsRoutes);
   app.use('/api/auth', authRoutes);
   app.use('/api/learning', learningRoutes);
+  app.use('/api/chatbot', chatbotRoutes);
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
 

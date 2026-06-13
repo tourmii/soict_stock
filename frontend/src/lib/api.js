@@ -47,6 +47,16 @@ export const api = {
       body: JSON.stringify({ message, mode, context }),
     }),
 
+  /* Chatbot */
+  sendChatbotMessage: (payload) =>
+    request('/chatbot/message', { method: 'POST', body: JSON.stringify(payload) }),
+  getChatbotHistory: (userId) =>
+    request(`/chatbot/history?userId=${encodeURIComponent(userId)}`),
+  saveChatbotHistory: (payload) =>
+    request('/chatbot/history', { method: 'POST', body: JSON.stringify(payload) }),
+  clearChatbotHistory: (userId) =>
+    request(`/chatbot/history?userId=${encodeURIComponent(userId)}`, { method: 'DELETE' }),
+
   /* Scenarios */
   activateScenario: (id) => request(`/scenarios/${id}/activate`, { method: 'POST' }),
   deactivateScenario: () => request('/scenarios/deactivate', { method: 'POST' }),
