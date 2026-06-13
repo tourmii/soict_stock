@@ -42,6 +42,12 @@ npm install
 npm start
 ```
 
+Create `backend/services/.env` before starting the backend:
+
+```env
+MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>/<database>?retryWrites=true&w=majority
+```
+
 **2. Start the Frontend:**
 ```bash
 cd frontend
@@ -49,3 +55,7 @@ npm install
 npm run dev
 ```
 *Note: This will usually start the frontend on port 5173 or 5174 depending on Vite's availability, not port 80.*
+
+### Blog/CMS
+
+Blog posts are stored in the MongoDB `blog_posts` collection. The backend creates indexes for `slug`, `status`, `author_id`, and `published_at` during startup. Public visitors can read only published posts; signed-in users can create drafts, publish, archive, and delete their own draft/archived posts.

@@ -16,6 +16,7 @@ import advisorRoutes from './routes/advisor.js';
 import scenarioRoutes from './routes/scenarios.js';
 import newsRoutes from './routes/news.js';
 import authRoutes from './routes/auth.js';
+import blogRoutes from './routes/blogs.js';
 import { setupPriceStream } from './websocket/priceStream.js';
 
 async function main() {
@@ -53,6 +54,7 @@ async function main() {
   app.use('/api/scenarios', scenarioRoutes);
   app.use('/api/news', newsRoutes);
   app.use('/api/auth', authRoutes);
+  app.use('/api/blogs', blogRoutes);
 
   // Health check
   app.get('/api/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));

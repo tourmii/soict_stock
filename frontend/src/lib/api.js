@@ -2,8 +2,8 @@ const API_BASE = '/api';
 
 async function request(url, options = {}) {
   const res = await fetch(`${API_BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
+    headers: { 'Content-Type': 'application/json', ...options.headers },
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ message: 'Request failed' }));
@@ -53,4 +53,36 @@ export const api = {
 
   /* Backtest */
   runBacktest: (strategy) => request('/advisor/backtest', { method: 'POST', body: JSON.stringify(strategy) }),
+
+  /* Blogs */
+  getBlogs: () => request('/blogs'),
+  getBlog: (slug) => request(`/blogs/${encodeURIComponent(slug)}`),
+  getMyBlogs: (userId) => request(`/blogs/me?userId=${encodeURIComponent(userId)}`, {
+    headers: { 'x-user-id': userId },
+  }),
+  createBlogPost: (post, userId) => request('/blogs', {
+    method: 'POST',
+    headers: { 'x-user-id': userId },
+    body: JSON.stringify({ ...post, userId }),
+  }),
+  updateBlogPost: (id, post, userId) => request(`/blogs/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'x-user-id': userId },
+    body: JSON.stringify({ ...post, userId }),
+  }),
+  publishBlogPost: (id, userId) => request(`/blogs/${encodeURIComponent(id)}/publish`, {
+    method: 'PATCH',
+    headers: { 'x-user-id': userId },
+    body: JSON.stringify({ userId }),
+  }),
+  archiveBlogPost: (id, userId) => request(`/blogs/${encodeURIComponent(id)}/archive`, {
+    method: 'PATCH',
+    headers: { 'x-user-id': userId },
+    body: JSON.stringify({ userId }),
+  }),
+  deleteBlogPost: (id, userId) => request(`/blogs/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { 'x-user-id': userId },
+    body: JSON.stringify({ userId }),
+  }),
 };
