@@ -1,64 +1,91 @@
 import { useEffect, useRef, useState, useMemo } from 'react';
-import { createChart, CandlestickSeries, HistogramSeries } from 'lightweight-charts';
+import { createChart, CandlestickSeries, HistogramSeries, LineSeries } from 'lightweight-charts';
 import { useMarketStore } from '../../store/marketStore';
-import { STOCKS, TIMEFRAMES } from '../../lib/constants';
-import { formatCurrency, formatPercentRaw } from '../../lib/formatters';
+import { TIMEFRAMES } from '../../lib/constants';
+import { SMA, EMA, BollingerBands } from '../../lib/indicators';
+
+const INDICATORS = [
+  { key: 'ma20',  label: 'MA 20',  color: '#F59E0B' },
+  { key: 'ma50',  label: 'MA 50',  color: '#8B5CF6' },
+  { key: 'ema12', label: 'EMA 12', color: '#06B6D4' },
+  { key: 'ema26', label: 'EMA 26', color: '#EC4899' },
+  { key: 'bb',    label: 'BB 20',  color: '#22C55E' },
+];
+
+const MAX_BARS = {
+  '15m': 500, '1H': 500, '4H': 500, '1D': 365, '1W': 52, '1M': 12,
+};
+
+const LONG_TF = new Set(['4H', '1D', '1W', '1M']);
 
 export default function StockChart() {
   const chartContainerRef = useRef(null);
-  const chartRef = useRef(null);
-  const candleSeriesRef = useRef(null);
-  const volumeSeriesRef = useRef(null);
-  const prevTickerRef = useRef(null);
-  const prevTimeframeRef = useRef(null);
-  const lastBarCountRef = useRef(0);
+  const chartRef          = useRef(null);
+  const candleSeriesRef   = useRef(null);
+  const volumeSeriesRef   = useRef(null);
+  const indSeriesRef      = useRef({});
 
-  const selectedTicker = useMarketStore((s) => s.selectedTicker);
-  const rawTicks = useMarketStore((s) => s.rawTicks);
-  const prices = useMarketStore((s) => s.prices);
-  const getChange = useMarketStore((s) => s.getChange);
-  const setSelectedTicker = useMarketStore((s) => s.setSelectedTicker);
-  const getOHLCV = useMarketStore((s) => s.getOHLCV);
+  // Refs used for structural-change detection (do not trigger re-renders)
+  const prevTickerRef    = useRef(null);
+  const prevTimeframeRef = useRef(null);
+  const prevBarCountRef  = useRef(0);
+  const prevFirstTimeRef = useRef(null);
+
+  const selectedTicker       = useMarketStore((s) => s.selectedTicker);
+  const rawTicks             = useMarketStore((s) => s.rawTicks);
+  const historicalOHLCV      = useMarketStore((s) => s.historicalOHLCV);
+  const getOHLCVWithHistory  = useMarketStore((s) => s.getOHLCVWithHistory);
+  const fetchHistoricalOHLCV = useMarketStore((s) => s.fetchHistoricalOHLCV);
 
   const [timeframe, setTimeframe] = useState('1D');
-  const stock = STOCKS.find((s) => s.ticker === selectedTicker);
-  const { change, changePercent } = getChange(selectedTicker);
+  const [activeInd, setActiveInd] = useState({});
 
-  // Aggregate raw ticks into OHLCV bars for the selected timeframe
-  const ohlcvBars = useMemo(() => {
-    return getOHLCV(selectedTicker, timeframe);
-  }, [selectedTicker, rawTicks, timeframe, getOHLCV]);
+  // Fetch REST data when switching to a long timeframe
+  useEffect(() => {
+    if (LONG_TF.has(timeframe)) fetchHistoricalOHLCV(selectedTicker, timeframe);
+  }, [selectedTicker, timeframe]);
 
-  // Determine how many bars to display based on timeframe
-  const displayBars = useMemo(() => {
-    // Show a reasonable number of bars for each timeframe
-    const maxBars = {
-      '15m': 200,  // ~2 days of 15m candles
-      '1H': 200,   // ~8 days of hourly candles
-      '4H': 200,   // ~33 days of 4H candles
-      '1D': 365,   // 1 year of daily candles
-      '1W': 104,   // 2 years of weekly candles
-      '1M': 60,    // 5 years of monthly candles
-    };
-    const max = maxBars[timeframe] || 200;
-    return ohlcvBars.slice(-max);
-  }, [ohlcvBars, timeframe]);
+  const ohlcvBars = useMemo(
+    () => getOHLCVWithHistory(selectedTicker, timeframe),
+    [selectedTicker, rawTicks, historicalOHLCV, timeframe]
+  );
 
+  const displayBars = useMemo(
+    () => ohlcvBars.slice(-(MAX_BARS[timeframe] || 500)),
+    [ohlcvBars, timeframe]
+  );
+
+  // ── Create chart once ─────────────────────────────────────────────
   useEffect(() => {
     if (!chartContainerRef.current) return;
 
     const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
-      height: 380,
-      layout: { background: { color: '#ffffff' }, textColor: '#6B7280', fontFamily: 'DM Sans' },
-      grid: { vertLines: { color: '#F3F4F6' }, horzLines: { color: '#F3F4F6' } },
+      autoSize: true,
+      layout: {
+        background: { color: '#ffffff' },
+        textColor: '#6B7280',
+        fontFamily: 'DM Sans, sans-serif',
+      },
+      grid: {
+        vertLines: { color: '#F3F4F6' },
+        horzLines: { color: '#F3F4F6' },
+      },
       crosshair: { mode: 0 },
-      rightPriceScale: { borderColor: '#E5E7EB', scaleMargins: { top: 0.1, bottom: 0.25 } },
-      timeScale: { borderColor: '#E5E7EB', timeVisible: true, secondsVisible: false },
+      rightPriceScale: {
+        borderColor: '#E5E7EB',
+        scaleMargins: { top: 0.08, bottom: 0.22 },
+      },
+      timeScale: {
+        borderColor: '#E5E7EB',
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 5,
+      },
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#22C55E', downColor: '#EF4444', borderUpColor: '#22C55E', borderDownColor: '#EF4444',
+      upColor: '#22C55E', downColor: '#EF4444',
+      borderUpColor: '#22C55E', borderDownColor: '#EF4444',
       wickUpColor: '#22C55E', wickDownColor: '#EF4444',
     });
 
@@ -66,107 +93,152 @@ export default function StockChart() {
       priceFormat: { type: 'volume' },
       priceScaleId: '',
     });
-    volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
+    volumeSeries.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
 
-    chartRef.current = chart;
+    chartRef.current        = chart;
     candleSeriesRef.current = candleSeries;
     volumeSeriesRef.current = volumeSeries;
 
-    const handleResize = () => {
-      if (chartContainerRef.current) chart.applyOptions({ width: chartContainerRef.current.clientWidth });
-    };
-    window.addEventListener('resize', handleResize);
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-      chart.remove();
-    };
+    return () => { chart.remove(); };
   }, []);
 
-  /* Full data reset — only when ticker or timeframe changes */
+  // ── Unified chart update: structural reload OR incremental tick ───
+  //
+  // A "structural" change (setData + fitContent + indicator rebuild) happens when:
+  //   • ticker changed          • timeframe changed
+  //   • bar count changed       • first bar's time changed (REST data replaced rawTick-only data)
+  //
+  // Everything else is a real-time tick → update() just the last candle.
+  // This covers ALL timeframes including 4H/1D/1W/1M so the chart always stays live.
   useEffect(() => {
-    if (!candleSeriesRef.current || !volumeSeriesRef.current) return;
+    const cs = candleSeriesRef.current;
+    const vs = volumeSeriesRef.current;
+    const ch = chartRef.current;
+    if (!cs || !vs || !ch || displayBars.length === 0) return;
 
-    const tickerChanged = prevTickerRef.current !== selectedTicker;
-    const timeframeChanged = prevTimeframeRef.current !== timeframe;
+    const tickerChanged   = prevTickerRef.current    !== selectedTicker;
+    const tfChanged       = prevTimeframeRef.current !== timeframe;
+    const countChanged    = displayBars.length       !== prevBarCountRef.current;
+    const firstTimeChanged = displayBars[0]?.time   !== prevFirstTimeRef.current;
+    const isFirstRender   = prevTickerRef.current === null;
 
-    if (tickerChanged || timeframeChanged || prevTickerRef.current === null) {
-      const candles = displayBars.map((bar) => ({
-        time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close,
-      }));
-      const volumes = displayBars.map((bar) => ({
-        time: bar.time, value: bar.volume,
-        color: bar.close >= bar.open ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)',
-      }));
+    const structural = isFirstRender || tickerChanged || tfChanged || countChanged || firstTimeChanged;
 
-      candleSeriesRef.current.setData(candles);
-      volumeSeriesRef.current.setData(volumes);
-      lastBarCountRef.current = displayBars.length;
+    if (structural) {
+      clearIndicators();
 
-      if (chartRef.current) chartRef.current.timeScale().fitContent();
+      cs.setData(displayBars.map((b) => ({
+        time: b.time, open: b.open, high: b.high, low: b.low, close: b.close,
+      })));
+      vs.setData(displayBars.map((b) => ({
+        time: b.time, value: b.volume,
+        color: b.close >= b.open ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)',
+      })));
 
-      prevTickerRef.current = selectedTicker;
+      ch.timeScale().fitContent();
+      applyIndicators(displayBars, activeInd);
+
+      prevTickerRef.current    = selectedTicker;
       prevTimeframeRef.current = timeframe;
+      prevBarCountRef.current  = displayBars.length;
+      prevFirstTimeRef.current = displayBars[0]?.time ?? null;
+    } else {
+      // Incremental: update the last (in-progress) candle in real-time
+      const last = displayBars[displayBars.length - 1];
+      cs.update({ time: last.time, open: last.open, high: last.high, low: last.low, close: last.close });
+      vs.update({
+        time: last.time, value: last.volume,
+        color: last.close >= last.open ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)',
+      });
     }
   }, [selectedTicker, timeframe, displayBars]);
 
-  /* Incremental update — preserves zoom when only price data changes */
+  // ── Rebuild indicators when toggled ──────────────────────────────
   useEffect(() => {
-    if (!candleSeriesRef.current || !volumeSeriesRef.current) return;
-    if (prevTickerRef.current !== selectedTicker) return;
+    if (!chartRef.current || displayBars.length === 0) return;
+    clearIndicators();
+    applyIndicators(displayBars, activeInd);
+  }, [activeInd]);
 
-    const len = displayBars.length;
-    if (len === 0) return;
-
-    const lastBar = displayBars[len - 1];
-
-    // Update the latest candle in-place (no zoom reset)
-    candleSeriesRef.current.update({
-      time: lastBar.time, open: lastBar.open, high: lastBar.high, low: lastBar.low, close: lastBar.close,
-    });
-    volumeSeriesRef.current.update({
-      time: lastBar.time, value: lastBar.volume,
-      color: lastBar.close >= lastBar.open ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)',
-    });
-
-    // If a brand-new bar was added, update full data
-    if (len > lastBarCountRef.current) {
-      const candles = displayBars.map((bar) => ({
-        time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close,
-      }));
-      const volumes = displayBars.map((bar) => ({
-        time: bar.time, value: bar.volume,
-        color: bar.close >= bar.open ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)',
-      }));
-      candleSeriesRef.current.setData(candles);
-      volumeSeriesRef.current.setData(volumes);
-      lastBarCountRef.current = len;
+  // ── Indicator helpers ────────────────────────────────────────────
+  function clearIndicators() {
+    if (!chartRef.current) return;
+    for (const s of Object.values(indSeriesRef.current)) {
+      if (s) try { chartRef.current.removeSeries(s); } catch {}
     }
-  }, [displayBars]);
+    indSeriesRef.current = {};
+  }
+
+  function applyIndicators(bars, active) {
+    if (!chartRef.current || bars.length === 0) return;
+    const closes = bars.map((b) => b.close);
+    const toLine  = (vals) =>
+      bars.map((b, i) => (vals[i] != null ? { time: b.time, value: vals[i] } : null)).filter(Boolean);
+
+    if (active.ma20) {
+      const s = chartRef.current.addSeries(LineSeries, { color: '#F59E0B', lineWidth: 1 });
+      s.setData(toLine(SMA(closes, 20)));
+      indSeriesRef.current.ma20 = s;
+    }
+    if (active.ma50) {
+      const s = chartRef.current.addSeries(LineSeries, { color: '#8B5CF6', lineWidth: 1 });
+      s.setData(toLine(SMA(closes, 50)));
+      indSeriesRef.current.ma50 = s;
+    }
+    if (active.ema12) {
+      const s = chartRef.current.addSeries(LineSeries, { color: '#06B6D4', lineWidth: 1 });
+      s.setData(toLine(EMA(closes, 12)));
+      indSeriesRef.current.ema12 = s;
+    }
+    if (active.ema26) {
+      const s = chartRef.current.addSeries(LineSeries, { color: '#EC4899', lineWidth: 1 });
+      s.setData(toLine(EMA(closes, 26)));
+      indSeriesRef.current.ema26 = s;
+    }
+    if (active.bb) {
+      const { upper, middle, lower } = BollingerBands(closes, 20, 2);
+      const up  = chartRef.current.addSeries(LineSeries, { color: '#22C55E', lineWidth: 1, lineStyle: 1 });
+      const mid = chartRef.current.addSeries(LineSeries, { color: '#22C55E', lineWidth: 1 });
+      const lo  = chartRef.current.addSeries(LineSeries, { color: '#22C55E', lineWidth: 1, lineStyle: 1 });
+      up.setData(toLine(upper));
+      mid.setData(toLine(middle));
+      lo.setData(toLine(lower));
+      indSeriesRef.current.bb_up  = up;
+      indSeriesRef.current.bb_mid = mid;
+      indSeriesRef.current.bb_lo  = lo;
+    }
+  }
+
+  const toggleInd = (key) => setActiveInd((prev) => ({ ...prev, [key]: !prev[key] }));
 
   return (
-    <div className="card" style={{padding:0,overflow:'hidden'}}>
-      <div style={{padding:'16px 20px',borderBottom:'var(--border-light)',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'12px'}}>
-        <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
-          <select value={selectedTicker} onChange={(e)=>setSelectedTicker(e.target.value)} className="input select" style={{width:'auto',padding:'6px 30px 6px 10px',fontWeight:600,fontSize:'var(--text-sm)'}}>
-            {STOCKS.map((s)=>(<option key={s.ticker} value={s.ticker}>{s.ticker} — {s.name}</option>))}
-          </select>
-          <div>
-            <span style={{fontSize:'var(--text-xl)',fontWeight:700}}>{formatCurrency(prices[selectedTicker])}</span>
-            <span className={`badge ${changePercent>=0?'badge-green':'badge-red'}`} style={{marginLeft:'8px',fontSize:'11px'}}>
-              {changePercent>=0?'↑':'↓'} {formatPercentRaw(Math.abs(changePercent))}
-            </span>
-          </div>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      <div className="chart-toolbar">
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+          {INDICATORS.map((ind) => (
+            <button
+              key={ind.key}
+              onClick={() => toggleInd(ind.key)}
+              className={`indicator-btn ${activeInd[ind.key] ? 'active' : ''}`}
+              style={{ '--ind-color': ind.color }}
+            >
+              {ind.label}
+            </button>
+          ))}
         </div>
-        <div style={{display:'flex',gap:'4px',background:'var(--gray-100)',borderRadius:'var(--radius-md)',padding:'3px'}}>
-          {TIMEFRAMES.map((tf)=>(
-            <button key={tf} onClick={()=>setTimeframe(tf)} style={{padding:'4px 10px',fontSize:'12px',fontWeight:600,borderRadius:'var(--radius-sm)',border:'none',background:timeframe===tf?'var(--white)':'transparent',color:timeframe===tf?'var(--primary)':'var(--gray-500)',cursor:'pointer',boxShadow:timeframe===tf?'var(--shadow-xs)':'none',transition:'all 0.15s'}}>
+        <div style={{ display: 'flex', gap: '2px' }}>
+          {TIMEFRAMES.map((tf) => (
+            <button
+              key={tf}
+              onClick={() => setTimeframe(tf)}
+              className={`tf-btn ${timeframe === tf ? 'active' : ''}`}
+            >
               {tf}
             </button>
           ))}
         </div>
       </div>
-      <div ref={chartContainerRef} style={{width:'100%'}}/>
+      <div ref={chartContainerRef} style={{ flex: 1, minHeight: 0 }} />
     </div>
   );
 }
