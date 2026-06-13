@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import LessonCard from '../components/learn/LessonCard';
 import QuizModule from '../components/learn/QuizModule';
 import MarketAnalysisLab from '../components/learn/MarketAnalysisLab';
@@ -21,6 +22,7 @@ export default function Learn() {
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedQuiz, setSelectedQuiz] = useState(null);
   const [expandedLessonId, setExpandedLessonId] = useState(null);
+  const [searchParams] = useSearchParams();
   const user = useAuthStore((state) => state.user);
   const holdings = usePortfolioStore((state) => state.holdings);
   const transactions = usePortfolioStore((state) => state.transactions);
@@ -71,6 +73,32 @@ export default function Learn() {
     { id: 'patterns', label: 'Patterns', icon: 'C', desc: 'Candlesticks' },
     { id: 'achievements', label: 'Achievements', icon: 'A', desc: 'Badges' },
   ];
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    const lessonId = searchParams.get('lessonId');
+    const quizId = searchParams.get('quizId');
+    const validTabs = tabs.map((item) => item.id);
+    if (lessonId && LESSONS.some((lesson) => lesson.id === lessonId)) {
+      setActiveTab('lessons');
+      setSelectedQuiz(null);
+      setExpandedLessonId(lessonId);
+      setTimeout(() => document.getElementById(`lesson-${lessonId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+      return;
+    }
+    if (quizId) {
+      const quiz = QUIZZES.find((item) => item.id === quizId);
+      if (quiz) {
+        setActiveTab('quizzes');
+        setSelectedQuiz(quiz);
+      }
+      return;
+    }
+    if (tab && validTabs.includes(tab)) {
+      setActiveTab(tab);
+      setSelectedQuiz(null);
+    }
+  }, [searchParams]);
 
   const openLesson = (lessonId) => {
     setExpandedLessonId(lessonId);

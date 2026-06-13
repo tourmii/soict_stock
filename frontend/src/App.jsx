@@ -9,6 +9,7 @@ import Leaderboard from './pages/Leaderboard';
 
 import Learn from './pages/Learn';
 import Toast from './components/shared/Toast';
+import ChatbotWidget from './components/chatbot/ChatbotWidget';
 import { useMarketStore } from './store/marketStore';
 import { useNewsStore } from './store/newsStore';
 import { useOrderStore } from './store/orderStore';
@@ -152,6 +153,7 @@ function App() {
         </Routes>
       </main>
       <Footer />
+      <ChatbotWidget />
       <Toast />
     </Router>
   );

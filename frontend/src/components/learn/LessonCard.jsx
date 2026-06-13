@@ -80,6 +80,14 @@ export default function LessonCard({
             </div>
           )}
 
+          {!progress?.completed && (
+            <div className="lesson-bulk-actions">
+              <button className="btn btn-secondary btn-sm" onClick={() => onLessonComplete?.(lesson.id)}>
+                Mark all sections as complete
+              </button>
+            </div>
+          )}
+
           {lesson.content.map((section, idx) => {
             const completed = completedSections.has(idx);
             return (

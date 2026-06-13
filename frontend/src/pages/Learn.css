@@ -617,6 +617,10 @@
   gap: 10px;
   flex-wrap: wrap;
 }
+.lesson-bulk-actions {
+  display: flex;
+  justify-content: flex-end;
+}
 .lesson-scenario p {
   font-size: 13px;
   color: var(--gray-700);
