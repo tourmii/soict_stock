@@ -53,6 +53,12 @@ export async function connectDB() {
   await db.collection('learning_progress').createIndex({ userId: 1 }, { unique: true });
   await db.collection('chatbot_conversations').createIndex({ userId: 1 }, { unique: true });
 
+  // Contest indexes
+  await db.collection('contests').createIndex({ status: 1 });
+  await db.collection('contest_portfolios').createIndex({ contestId: 1, userId: 1 }, { unique: true });
+  await db.collection('contest_portfolios').createIndex({ contestId: 1, portfolioValue: -1 });
+
+  console.log(`✅ Connected to MongoDB: ${DB_NAME}`);
   console.log(`✅ Connected to MongoDB: ${dbName}`);
   return db;
 }
