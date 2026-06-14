@@ -25,6 +25,17 @@ function generateRuleBasedReply({ message = '', context = {} }) {
   if (/hi|hello|what can you do|help/.test(text)) {
     intent = 'GeneralGreeting';
     reply = 'Hello! I can explain SoictStock concepts, simulated portfolio risk, lessons, quizzes, orders, and platform navigation.';
+  } else if (isStockQuestion(text, context)) {
+    intent = 'StockAnalysis';
+    const m = context.market || {};
+    const stock = m.stock || {};
+    const summary = m.ohlcvSummary;
+    reply = `${stock.ticker || m.mentionedTicker} is ${stock.fullName || stock.name || 'a simulated stock'} in the ${stock.sector || 'market'} sector. Its simulated price is near ${formatMoney(m.prices?.[stock.ticker] || stock.currentPrice || stock.basePrice)}, with the latest tick change around ${formatPercent(m.change?.changePercent)}.`;
+    if (summary) {
+      reply += ` Over the recent 1H bars available to the assistant, the simulated return is about ${formatPercent(summary.returnPercent)} with a range near ${formatPercent(summary.rangePercent)}.`;
+    }
+    reply += ' Use this as educational context for the simulator, not as a real buy/sell signal.';
+    cards = [{ type: 'navigation', title: stock.ticker || m.mentionedTicker, description: `${stock.sector || 'Simulated'} stock context`, actionLabel: 'Open Simulator', path: '/simulation' }];
   } else if (/portfolio|holding|cash|p\/l|profit|loss/.test(text)) {
     intent = 'ExplainPortfolio';
     const p = context.portfolio || {};
@@ -130,6 +141,7 @@ function buildThinkingConfig() {
 function inferIntent(message = '') {
   const text = message.toLowerCase();
   if (/portfolio|holding|cash|p\/l|profit|loss/.test(text)) return 'ExplainPortfolio';
+  if (/stock|ticker|price|move|moving|volatility|sector|compare/.test(text)) return 'StockAnalysis';
   if (/risk|diversif|concentration|volatile/.test(text)) return 'RiskAnalysis';
   if (/order|market order|limit|stop/.test(text)) return 'OrderHelp';
   if (/lesson|learn next|quiz/.test(text)) return text.includes('quiz') ? 'QuizHelp' : 'RecommendLesson';
@@ -139,11 +151,18 @@ function inferIntent(message = '') {
   return 'GeminiAssistant';
 }
 
+function isStockQuestion(text = '', context = {}) {
+  if (!context.market?.mentionedTicker) return false;
+  if (/portfolio|holding|holdings|cash|p\/l|profit|loss/.test(text)) return false;
+  return Boolean(context.market.explicitMentionedTicker) || /stock|ticker|price|move|moving|volatility|sector|compare|about|why|what is|explain/.test(text);
+}
+
 function buildSuggestions(message = '') {
   const intent = inferIntent(message);
   if (intent === 'RiskAnalysis') return ['Explain diversification', 'Open risk lesson', 'Analyze my portfolio'];
   if (intent === 'OrderHelp') return ['Explain limit orders', 'Explain stop-loss', 'Open simulator'];
   if (intent === 'QuizHelp') return ['Recommend a quiz', 'Explain my score', 'Open learning paths'];
+  if (intent === 'StockAnalysis') return ['Compare sector peers', 'Explain volatility', 'Open simulator'];
   if (intent === 'PlatformHelp') return ['Open Market Lab', 'Open Patterns', 'Open Learn'];
   return ['Analyze my risk', 'Recommend a lesson', 'Explain diversification'];
 }
@@ -169,6 +188,10 @@ function buildCards(message = '', context = {}) {
   }
   if (intent === 'ExplainPortfolio') {
     return [{ type: 'navigation', title: 'Portfolio', description: 'Review holdings, cash, and P/L.', actionLabel: 'Open Portfolio', path: '/portfolio' }];
+  }
+  if (intent === 'StockAnalysis') {
+    const stock = context.market?.stock;
+    return [{ type: 'navigation', title: stock?.ticker || context.market?.mentionedTicker || 'Simulator', description: stock?.fullName || 'Review simulated stock data.', actionLabel: 'Open Simulator', path: '/simulation' }];
   }
   return [];
 }
@@ -225,8 +248,24 @@ function buildPromptContext(context = {}) {
     market: {
       selectedTicker: context.market?.selectedTicker,
       mentionedTicker: context.market?.mentionedTicker,
+      explicitMentionedTicker: context.market?.explicitMentionedTicker,
       stock: context.market?.stock,
       change: context.market?.change,
+      sectorPeers: (context.market?.sectorPeers || []).slice(0, 5),
+      topMovers: context.market?.topMovers || [],
+      highVolatilityStocks: context.market?.highVolatilityStocks || [],
+      ohlcvSummary: context.market?.ohlcvSummary,
+      stockUniverse: (context.market?.stocks || []).map((stock) => ({
+        ticker: stock.ticker,
+        name: stock.name,
+        fullName: stock.fullName,
+        sector: stock.sector,
+        basePrice: stock.basePrice,
+        currentPrice: stock.currentPrice,
+        volatility: stock.volatility,
+        changePercent: stock.change?.changePercent,
+        dailyChangePercent: stock.dailyChange?.changePercent,
+      })),
     },
     portfolio: {
       cash: context.portfolio?.cash,
@@ -292,4 +331,10 @@ function makeSafeResponse(response) {
 
 function formatMoney(value = 0) {
   return `$${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+
+function formatPercent(value = 0) {
+  const number = Number(value || 0);
+  const sign = number > 0 ? '+' : '';
+  return `${sign}${number.toFixed(2)}%`;
 }

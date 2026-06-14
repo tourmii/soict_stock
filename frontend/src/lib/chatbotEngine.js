@@ -6,7 +6,10 @@ import { CONSULTANTS } from './consultantData';
 import { LESSONS, QUIZZES } from './learningData';
 
 const money = (value = 0) => `$${Number(value || 0).toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-const pct = (value = 0) => `${Number(value || 0).toFixed(1)}%`;
+const pct = (value = 0) => {
+  const number = Number(value || 0);
+  return `${number > 0 ? '+' : ''}${number.toFixed(1)}%`;
+};
 
 export function generateChatbotReply(message, context) {
   const { intent } = detectIntent(message, context);
@@ -104,10 +107,23 @@ export function buildRiskAnalysisResponse(context) {
 export function buildStockMovementResponse(message, context) {
   const m = context.market;
   const news = context.news.relatedNews[0];
+  const price = m.prices?.[m.mentionedTicker] ?? m.stock?.currentPrice ?? m.stock?.basePrice;
+  const summary = m.ohlcvSummary;
+  const peers = (m.sectorPeers || []).slice(0, 3).map((stock) => stock.ticker).join(', ');
+  const topMovers = (m.topMovers || []).slice(0, 3).map((stock) => `${stock.ticker} ${pct(stock.changePercent)}`).join(', ');
+  const highVolatility = (m.highVolatilityStocks || []).map((stock) => stock.ticker).join(', ');
+
   return {
-    reply: `${m.mentionedTicker} is ${m.change.change >= 0 ? 'up' : 'down'} ${pct(m.change.changePercent)} in the current simulation snapshot. The move may relate to simulated demand, sector exposure (${m.stock?.sector || 'unknown sector'}), volatility, and ${news ? `recent news: "${news.headline}"` : 'available market sentiment'}.`,
+    reply: [
+      `${m.mentionedTicker} is ${m.stock?.fullName || m.stock?.name || 'a simulated stock'} in the ${m.stock?.sector || 'unknown'} sector. Its current simulated price is about ${money(price)}, with the latest tick change at ${pct(m.change.changePercent)}.`,
+      summary ? `Across the recent 1H bars I can see, the simulated return is ${pct(summary.returnPercent)} and the price range is about ${pct(summary.rangePercent)}.` : '',
+      peers ? `Useful sector peers for comparison: ${peers}.` : '',
+      topMovers ? `Current largest movers in the simulation snapshot include: ${topMovers}.` : '',
+      highVolatility ? `Higher-volatility simulated tickers include: ${highVolatility}.` : '',
+      news ? `Relevant simulated news: "${news.headline}".` : 'No directly related simulated news is visible in the current context.',
+    ].filter(Boolean).join('\n\n'),
     intent: 'ExplainStockMovement',
-    suggestions: ['Explain news impact', 'Analyze my risk', 'Open Market Lab'],
+    suggestions: ['Compare sector peers', 'Explain volatility', 'Open Market Lab'],
     cards: [{ type: 'navigation', title: 'Market Lab', description: 'Review indicators for this ticker.', actionLabel: 'Open Learn', path: '/learn?tab=lab' }, lessonCard('news-impact')].filter(Boolean),
     metadata: { ticker: m.mentionedTicker },
   };

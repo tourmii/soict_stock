@@ -1,18 +1,26 @@
 /**
- * Unified Simulation Engine — Merton Jump-Diffusion Model
- * ════════════════════════════════════════════════════════
+ * Unified Simulation Engine
+ * ══════════════════════════
  *
- * Price dynamics follow the Merton Jump-Diffusion SDE:
+ * Price dynamics combine three layers:
  *
- *   dS = μ·S·dt  +  σ·S·dW  +  S·(J − 1)·dN
- *         ╰drift╯   ╰diffusion╯  ╰Poisson jumps╯
+ *  1. Merton Jump-Diffusion (bar-level history)
+ *       dS = μS dt + σS dW + S(J−1) dN
+ *
+ *  2. Momentum follow-through
+ *       After a large move, price continues in that direction for a while
+ *       before the signal decays (trend-following / autocorrelation).
+ *
+ *  3. Soft Ornstein-Uhlenbeck mean reversion
+ *       A gentle pull back toward each stock's base price prevents
+ *       multi-month drift into absurd territory without hard bounces.
+ *
+ *  4. GARCH-like volatility clustering (real-time only)
+ *       After a shock, effective vol is elevated and decays back to normal.
  *
  * Storage model:
  *   • MongoDB stores ONLY 5-minute bars (one doc per ticker per bar).
  *   • Real-time 3-second price ticks are broadcast via WebSocket only (not stored).
- *   • On startup, each ticker is checked: if its oldest bar is not at least
- *     HISTORY_DAYS calendar days old, the full history is regenerated from scratch.
- *   • If history is sufficient, any gap since the last stored bar is filled.
  */
 import { getDb } from './db.js';
 import { STOCKS } from './stockData.js';
@@ -22,9 +30,20 @@ const BAR_SEC      = 300;           // 5-minute bars
 const HISTORY_DAYS = 30;            // 30 days of stored bars (safe for Atlas 512MB free tier)
 const YEAR_SEC     = 365 * 24 * 3600;
 const DT_BAR       = 1 / (252 * 78); // fraction of trading year per 5-min bar
-const DT_REALTIME  = 1 / 1000;       // larger dt → visible intraday movement
+// Calibrated so each stock's 24h σ ≈ vol × √(28800/90000):
+//   low-vol  (0.017) → ~1.0% / day
+//   mid-vol  (0.025) → ~1.4% / day
+//   high-vol (0.035) → ~2.0% / day
+const DT_REALTIME  = 1 / 90000;
 
-/* ── Random helpers ─────────────────────────────── */
+// Momentum / vol-clustering tuning for real-time ticks
+const MOMENTUM_DECAY    = 0.9985;  // per tick; half-life ≈ 462 ticks ≈ 23 min
+const VOL_CLUSTER_DECAY = 0.9980;  // per tick; half-life ≈ 346 ticks ≈ 17 min
+const MOMENTUM_FEEDBACK = 0.15;    // fraction of annualised return fed back into momentum
+const MEAN_REV_SPEED_RT  = 1.0;   // annual kappa for real-time OU term
+const MEAN_REV_SPEED_BAR = 2.0;   // annual kappa for bar-level OU term
+
+/* ── Random helpers ─────────────────────────────────────────── */
 function randn() {
   const u1 = Math.random();
   const u2 = Math.random();
@@ -39,7 +58,7 @@ function poisson(lambda) {
   return k - 1;
 }
 
-/* ── Sector jump parameters ─────────────────────── */
+/* ── Sector jump parameters ─────────────────────────────────── */
 const SECTOR_JUMP_PARAMS = {
   Technology:  { lambda: 60,  muJ: -0.003, sigmaJ: 0.025 },
   Healthcare:  { lambda: 30,  muJ: -0.002, sigmaJ: 0.035 },
@@ -51,81 +70,61 @@ const SECTOR_JUMP_PARAMS = {
 
 export class SimulationEngine {
   constructor() {
-    this.stocks = STOCKS;
-    this.prices = {};
-    this.regime = 'normal';
-    this.driftOverrides = {};
+    this.stocks   = STOCKS;
+    this.prices   = {};
+    this.regime   = 'normal';
+    this.driftOverrides        = {};
     this.volatilityMultipliers = {};
-    this.intervalId = null;
-    this.listeners = [];
+    this.intervalId  = null;
+    this.listeners   = [];
     this.initialized = false;
-    this._lastBarTime = 0; // last 5-min bar saved to MongoDB
+    this._lastBarTime = 0;
+
+    // Per-stock real-time state
+    this.momentum   = {}; // extra annual drift from recent price direction
+    this.volCluster = {}; // vol multiplier (1 = normal, > 1 after shock)
   }
 
-  /* ─── Startup ─────────────────────────────────── */
+  /* ─── Startup ─────────────────────────────────────────────── */
 
-  /**
-   * Initialize the engine.
-   * @param {Function} onProgress - optional callback({ stock, current, total, phase })
-   */
   async initialize(onProgress) {
     const db = getDb();
     const ticksCol  = db.collection('ticks');
     const stocksCol = db.collection('stocks');
 
-    // Seed stock metadata once
     if (await stocksCol.countDocuments() === 0) {
       await stocksCol.insertMany(this.stocks.map(s => ({ ...s, _id: s.ticker })));
       console.log(`📊 Seeded ${this.stocks.length} stocks into MongoDB`);
     }
 
-    const now = Math.floor(Date.now() / 1000);
-    const historyStart = now - HISTORY_DAYS * 24 * 3600; // 1 full calendar year ago
+    const now          = Math.floor(Date.now() / 1000);
+    const historyStart = now - HISTORY_DAYS * 24 * 3600;
 
-    // Prune bars older than 1 year + 1 day (keep a slight buffer)
     const { deletedCount } = await ticksCol.deleteMany({ time: { $lt: historyStart - 86400 } });
     if (deletedCount > 0) console.log(`🗑️  Pruned ${deletedCount} bars older than 1 year`);
 
-    // Ensure compound index for efficient per-ticker time queries
     await ticksCol.createIndex({ ticker: 1, time: 1 }, { background: true });
 
     for (let i = 0; i < this.stocks.length; i++) {
       const stock = this.stocks[i];
+      if (onProgress) onProgress({ stock: stock.ticker, current: i + 1, total: this.stocks.length, phase: 'check' });
 
-      if (onProgress) {
-        onProgress({ stock: stock.ticker, current: i + 1, total: this.stocks.length, phase: 'check' });
-      }
-
-      // Check whether this ticker already has a full year of history
       const oldestTick  = await ticksCol.findOne({ ticker: stock.ticker }, { sort: { time:  1 } });
       const latestTick  = await ticksCol.findOne({ ticker: stock.ticker }, { sort: { time: -1 } });
       const hasFullYear = oldestTick && oldestTick.time <= historyStart + BAR_SEC;
 
       if (!hasFullYear) {
-        // First boot OR history is insufficient — generate a full calendar year
         console.log(`⏳ Generating 1-year history for ${stock.ticker} (${i + 1}/${this.stocks.length})...`);
-
-        if (onProgress) {
-          onProgress({ stock: stock.ticker, current: i + 1, total: this.stocks.length, phase: 'generate' });
-        }
-
-        // Remove existing data so we don't mix 3-second ticks with 5-min bars
+        if (onProgress) onProgress({ stock: stock.ticker, current: i + 1, total: this.stocks.length, phase: 'generate' });
         await ticksCol.deleteMany({ ticker: stock.ticker });
-
         const ticks = this._generateHistory(stock, now, historyStart);
         await this._batchInsert(ticksCol, ticks);
         this.prices[stock.ticker] = ticks[ticks.length - 1].price;
 
       } else if (latestTick && (now - latestTick.time) > BAR_SEC) {
-        // History is sufficient but server was offline — fill the gap
-        const gapSec   = now - latestTick.time;
-        const gapHours = (gapSec / 3600).toFixed(1);
+        const gapHours = ((now - latestTick.time) / 3600).toFixed(1);
         console.log(`⏳ Filling ${gapHours}h gap for ${stock.ticker}...`);
-
-        if (onProgress) {
-          onProgress({ stock: stock.ticker, current: i + 1, total: this.stocks.length, phase: 'gap-fill' });
-        }
-
+        if (onProgress) onProgress({ stock: stock.ticker, current: i + 1, total: this.stocks.length, phase: 'gap-fill' });
         const gapTicks = this._fillGap(stock, latestTick.price, latestTick.time, now);
         if (gapTicks.length > 0) {
           await this._batchInsert(ticksCol, gapTicks);
@@ -135,22 +134,24 @@ export class SimulationEngine {
         }
 
       } else {
-        // Up-to-date — use the latest stored price
         this.prices[stock.ticker] = latestTick ? latestTick.price : stock.basePrice;
       }
+
+      // Initialise real-time momentum state for every stock (including newly added ones)
+      this.momentum[stock.ticker]   = 0;
+      this.volCluster[stock.ticker] = 1;
     }
 
-    // Align the last-bar-time to the current 5-min bucket
     this._lastBarTime = Math.floor(now / BAR_SEC) * BAR_SEC;
     this.initialized  = true;
-    console.log(`📈 Simulation engine initialized with ${this.stocks.length} stocks`);
+    console.log(`📈 Simulation engine initialised with ${this.stocks.length} stocks`);
   }
 
-  /* ─── Core: Merton Jump-Diffusion step ─────────── */
+  /* ─── Core: Merton Jump-Diffusion step ───────────────────── */
 
   _mertonStep(price, { drift, vol, lambda, muJ, sigmaJ, dt }) {
     const driftAdj     = drift + (this.driftOverrides[this.regime] || 0);
-    const effectiveVol = vol * (this.volatilityMultipliers[this.regime] || 1);
+    const effectiveVol = vol   * (this.volatilityMultipliers[this.regime] || 1);
 
     let logReturn = (driftAdj - 0.5 * effectiveVol ** 2) * dt
                   + effectiveVol * Math.sqrt(dt) * randn();
@@ -167,7 +168,7 @@ export class SimulationEngine {
     return SECTOR_JUMP_PARAMS[stock.sector] || SECTOR_JUMP_PARAMS.Technology;
   }
 
-  /* Keep price within ±50% of the stock's base price using a soft bounce. */
+  /* Soft bounce at ±50% of base price — last-resort safety net. */
   _softClamp(price, stock) {
     const lo = stock.basePrice * 0.50;
     const hi = stock.basePrice * 1.50;
@@ -176,32 +177,57 @@ export class SimulationEngine {
     return Math.max(0.50, price);
   }
 
-  /* ─── 5-minute bar generator ─────────────────────── */
-
+  /* ─── 5-minute bar generator ─────────────────────────────── */
+  /*
+   * Three-component drift for each bar:
+   *
+   *   total_drift = stock.drift          ← long-run base drift
+   *               + activeDrift          ← current trend phase OR jump follow-through
+   *               + meanRevDrift         ← OU pull toward base price
+   *
+   * When a jump event produces a log-return > 2.5σ_bar, we override
+   * `activeDrift` to point in the jump direction for 1–4 days, giving
+   * natural momentum follow-through instead of an isolated spike.
+   */
   _generateBars(stock, startPrice, startTime, endTime) {
-    const ticks = [];
-    const jp    = this._jumpParams(stock);
-    let price   = startPrice;
-    let trendDrift    = 0;
-    let trendBarsLeft = 0;
+    const ticks    = [];
+    const jp       = this._jumpParams(stock);
+    let price      = startPrice;
+    let activeDrift    = 0;   // current extra drift (annual)
+    let activeBarsLeft = 0;   // bars remaining in the active drift phase
+    const barSigma = stock.volatility * Math.sqrt(DT_BAR); // 1σ per bar
 
     for (let t = startTime + BAR_SEC; t <= endTime; t += BAR_SEC) {
-      // Inject multi-day trend phases for realistic chart patterns
-      if (trendBarsLeft <= 0 && Math.random() < 0.008) {
-        trendDrift    = (Math.random() < 0.5 ? 1 : -1) * (0.05 + Math.random() * 0.15);
-        trendBarsLeft = Math.floor(78 * (2 + Math.random() * 8));
+      // Random multi-day trend phase (market character cycles)
+      if (activeBarsLeft <= 0 && Math.random() < 0.008) {
+        activeDrift    = (Math.random() < 0.5 ? 1 : -1) * (0.05 + Math.random() * 0.15);
+        activeBarsLeft = Math.floor(78 * (2 + Math.random() * 8)); // 2–10 days
       }
-      if (trendBarsLeft > 0) trendBarsLeft--;
-      else trendDrift = 0;
+      if (activeBarsLeft > 0) activeBarsLeft--;
+      else activeDrift = 0;
 
+      // Soft OU mean reversion: stronger the further price is from base
+      const deviation   = Math.log(price / stock.basePrice);
+      const meanRevDrift = -MEAN_REV_SPEED_BAR * deviation;
+
+      const prevPrice = price;
       price = this._mertonStep(price, {
-        drift: stock.drift + trendDrift,
-        vol:   stock.volatility,
+        drift:  stock.drift + activeDrift + meanRevDrift,
+        vol:    stock.volatility,
         lambda: jp.lambda, muJ: jp.muJ, sigmaJ: jp.sigmaJ,
-        dt:    DT_BAR,
+        dt:     DT_BAR,
       });
-      price = this._softClamp(price, stock);
 
+      // Detect Merton jump (|return| > 2.5σ) and inject directional follow-through.
+      // This replaces any current trend phase so the market "reacts" to the event.
+      const logReturn = Math.log(price / prevPrice);
+      if (Math.abs(logReturn) > 2.5 * barSigma) {
+        const dir      = logReturn > 0 ? 1 : -1;
+        activeDrift    = dir * (0.10 + Math.random() * 0.15); // 10–25% annual follow-through
+        activeBarsLeft = Math.floor(78 * (1 + Math.random() * 3)); // 1–4 trading days
+      }
+
+      price = this._softClamp(price, stock);
       ticks.push({
         ticker: stock.ticker,
         time:   t,
@@ -212,7 +238,7 @@ export class SimulationEngine {
     return ticks;
   }
 
-  /* ─── 1 calendar-year history (on first boot) ── */
+  /* ─── 1 calendar-year history (on first boot) ─────────────── */
 
   _generateHistory(stock, now, historyStart) {
     const startPrice = stock.basePrice * (0.90 + Math.random() * 0.20);
@@ -225,13 +251,13 @@ export class SimulationEngine {
     return anchor.concat(this._generateBars(stock, startPrice, historyStart, now));
   }
 
-  /* ─── Gap-fill: bridge offline periods ──────────── */
+  /* ─── Gap-fill: bridge offline periods ─────────────────────── */
 
   _fillGap(stock, fromPrice, fromTime, toTime) {
     return this._generateBars(stock, fromPrice, fromTime, toTime);
   }
 
-  /* ─── Batch insert helper ───────────────────────── */
+  /* ─── Batch insert helper ──────────────────────────────────── */
 
   async _batchInsert(collection, docs, batchSize = 5000) {
     for (let i = 0; i < docs.length; i += batchSize) {
@@ -239,10 +265,23 @@ export class SimulationEngine {
     }
   }
 
-  /* ─── Real-time tick (every 3 s) ───────────────── */
+  /* ─── Real-time tick (every 3 s) ──────────────────────────── */
   /*
-   * Price is updated in memory every 3 seconds and broadcast via WebSocket.
-   * MongoDB only receives ONE bar per 5-minute bucket — NOT every 3-second tick.
+   * Per-tick price dynamics:
+   *
+   *   effective_drift = stock.drift
+   *                   + regime override      ← scenario (bull / bear / sideways)
+   *                   + momentum[ticker]     ← decaying directional memory
+   *                   + meanRevDrift         ← soft OU pull toward base
+   *
+   *   effective_vol   = stock.volatility
+   *                   × regime vol multiplier
+   *                   × volCluster[ticker]   ← GARCH-like elevation after shocks
+   *
+   * Both momentum and volCluster decay each tick toward their resting values.
+   * applyShock() injects into both when news arrives.
+   *
+   * MongoDB receives ONE bar per 5-minute bucket — not every 3-second tick.
    */
   async tick() {
     if (!this.initialized) return {};
@@ -251,33 +290,56 @@ export class SimulationEngine {
     const updates = {};
 
     for (const stock of this.stocks) {
-      const jp = this._jumpParams(stock);
-      let newPrice = this._mertonStep(this.prices[stock.ticker], {
-        drift:  stock.drift,
-        vol:    stock.volatility,
-        lambda: jp.lambda,
-        muJ:    jp.muJ,
-        sigmaJ: jp.sigmaJ,
-        dt:     DT_REALTIME,
-      });
-      newPrice = this._softClamp(newPrice, stock);
-      this.prices[stock.ticker] = Math.round(newPrice * 100) / 100;
+      const ticker    = stock.ticker;
+      const prevPrice = this.prices[ticker];
 
-      updates[stock.ticker] = {
-        price: this.prices[stock.ticker],
-        tick:  { time: now, price: this.prices[stock.ticker], volume: Math.floor(200 + Math.random() * 2500) },
+      // Layer 1: regime scenario
+      const regimeDrift  = this.driftOverrides[this.regime]        || 0;
+      const regimeVolMul = this.volatilityMultipliers[this.regime]  || 1;
+
+      // Layer 2: soft OU mean reversion
+      const deviation    = Math.log(prevPrice / stock.basePrice);
+      const meanRevDrift = -MEAN_REV_SPEED_RT * deviation;
+
+      // Composite drift and vol
+      const effectiveDrift = stock.drift + regimeDrift + (this.momentum[ticker] || 0) + meanRevDrift;
+      const effectiveVol   = stock.volatility * regimeVolMul * (this.volCluster[ticker] || 1);
+
+      // GBM step — no Poisson jumps in real-time; discrete events go through applyShock()
+      const logStep = (effectiveDrift - 0.5 * effectiveVol ** 2) * DT_REALTIME
+                    + effectiveVol * Math.sqrt(DT_REALTIME) * randn();
+      let newPrice = prevPrice * Math.exp(logStep);
+      newPrice = this._softClamp(newPrice, stock);
+      newPrice = Math.round(newPrice * 100) / 100;
+
+      // Update momentum: EMA of annualised returns (gives natural trend-following)
+      const annualReturn = Math.log(newPrice / prevPrice) / DT_REALTIME;
+      this.momentum[ticker] =
+        (this.momentum[ticker] || 0) * MOMENTUM_DECAY
+        + annualReturn * MOMENTUM_FEEDBACK * (1 - MOMENTUM_DECAY);
+
+      // Decay vol clustering back toward 1
+      if ((this.volCluster[ticker] || 1) > 1) {
+        this.volCluster[ticker] = 1 + (this.volCluster[ticker] - 1) * VOL_CLUSTER_DECAY;
+        if (this.volCluster[ticker] < 1.001) this.volCluster[ticker] = 1;
+      }
+
+      this.prices[ticker] = newPrice;
+      updates[ticker] = {
+        price: newPrice,
+        tick:  { time: now, price: newPrice, volume: Math.floor(200 + Math.random() * 2500) },
       };
     }
 
-    // Persist ONE 5-minute bar per bucket — not every 3-second tick
+    // Persist ONE 5-minute bar per bucket
     const barTime = Math.floor(now / BAR_SEC) * BAR_SEC;
     if (barTime > this._lastBarTime) {
       this._lastBarTime = barTime;
       const db      = getDb();
-      const barDocs = this.stocks.map((stock) => ({
-        ticker: stock.ticker,
+      const barDocs = this.stocks.map((s) => ({
+        ticker: s.ticker,
         time:   barTime,
-        price:  this.prices[stock.ticker],
+        price:  this.prices[s.ticker],
         volume: Math.floor(500 + Math.random() * 4000),
       }));
       try {
@@ -291,7 +353,7 @@ export class SimulationEngine {
     return updates;
   }
 
-  /* ─── Control ────────────────────────────────────── */
+  /* ─── Control ──────────────────────────────────────────────── */
 
   start(intervalMs = 3000) {
     if (this.intervalId) return;
@@ -315,10 +377,13 @@ export class SimulationEngine {
   }
 
   applyShock(ticker, shockPercent) {
-    if (this.prices[ticker]) {
-      const capped = Math.max(-0.10, Math.min(0.10, shockPercent));
-      this.prices[ticker] *= (1 + capped);
-    }
+    if (!this.prices[ticker]) return;
+    const capped = Math.max(-0.10, Math.min(0.10, shockPercent));
+    this.prices[ticker] *= (1 + capped);
+    // Inject momentum in the shock direction so price continues moving after the event
+    this.momentum[ticker]   = (this.momentum[ticker] || 0) + capped * 8;
+    // Elevate vol clustering — more uncertainty immediately after a shock
+    this.volCluster[ticker] = Math.min(2.0, (this.volCluster[ticker] || 1) + Math.abs(capped) * 5);
   }
 
   getQuote(ticker) {
@@ -328,17 +393,12 @@ export class SimulationEngine {
     return { ticker, price, bid: price - spread / 2, ask: price + spread / 2, spread };
   }
 
-  /* ─── Data access ─────────────────────────────── */
+  /* ─── Data access ──────────────────────────────────────────── */
 
-  /**
-   * Fetch recent 5-min bars for all tickers (used for WebSocket init).
-   * Only returns the last `days` calendar days to keep the payload manageable.
-   */
   async getRecentHistory(days = 30) {
     const db     = getDb();
     const cutoff = Math.floor(Date.now() / 1000) - days * 24 * 3600;
     const result = {};
-
     for (const stock of this.stocks) {
       result[stock.ticker] = await db.collection('ticks')
         .find({ ticker: stock.ticker, time: { $gte: cutoff } })
@@ -348,9 +408,6 @@ export class SimulationEngine {
     return result;
   }
 
-  /**
-   * Fetch all stored bars for a single ticker (used by REST API for historical charts).
-   */
   async getTickHistory(ticker, limit = 120000) {
     const db = getDb();
     return db.collection('ticks')
