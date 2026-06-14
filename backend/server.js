@@ -16,6 +16,7 @@ import advisorRoutes from './routes/advisor.js';
 import scenarioRoutes from './routes/scenarios.js';
 import newsRoutes from './routes/news.js';
 import authRoutes from './routes/auth.js';
+import blogRoutes from './routes/blogs.js';
 import learningRoutes from './routes/learning.js';
 import chatbotRoutes from './routes/chatbot.js';
 import { setupPriceStream } from './websocket/priceStream.js';
@@ -51,6 +52,7 @@ async function main() {
   app.use('/api/scenarios', scenarioRoutes);
   app.use('/api/news', newsRoutes);
   app.use('/api/auth', authRoutes);
+  app.use('/api/blogs', blogRoutes);
   app.use('/api/learning', learningRoutes);
   app.use('/api/chatbot', chatbotRoutes);
 

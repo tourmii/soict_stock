@@ -6,6 +6,10 @@ import Landing from './pages/Landing';
 import Simulation from './pages/Simulation';
 import Portfolio from './pages/Portfolio';
 import Leaderboard from './pages/Leaderboard';
+import Blogs from './pages/Blogs';
+import BlogDetail from './pages/BlogDetail';
+import MyBlogs from './pages/MyBlogs';
+import BlogEditor from './pages/BlogEditor';
 
 import Learn from './pages/Learn';
 import Toast from './components/shared/Toast';
@@ -147,6 +151,11 @@ function App() {
           <Route path="/simulation" element={<Simulation />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/blogs" element={<Blogs />} />
+          <Route path="/blogs/:slug" element={<BlogDetail />} />
+          <Route path="/my-blogs" element={<MyBlogs />} />
+          <Route path="/my-blogs/new" element={<BlogEditor />} />
+          <Route path="/my-blogs/:id/edit" element={<BlogEditor />} />
           <Route path="/learn" element={<Learn />} />
           <Route path="/index.html" element={<Navigate to="/" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,21 +1,40 @@
 /**
  * MongoDB connection singleton
- * Database: soict_stock
  */
+import dotenv from 'dotenv';
 import { MongoClient } from 'mongodb';
+import { fileURLToPath } from 'node:url';
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
-const DB_NAME = 'soict_stock';
+dotenv.config({ path: fileURLToPath(new URL('./.env', import.meta.url)), quiet: true });
+
+const MONGODB_URI = process.env.MONGODB_URI;
+const FALLBACK_DB_NAME = 'soict_stock';
 
 let client = null;
 let db = null;
 
+function getDatabaseName(uri) {
+  if (process.env.MONGODB_DB) return process.env.MONGODB_DB;
+
+  try {
+    const parsed = new URL(uri);
+    const dbName = parsed.pathname.replace(/^\//, '').trim();
+    return dbName || FALLBACK_DB_NAME;
+  } catch {
+    return FALLBACK_DB_NAME;
+  }
+}
+
 export async function connectDB() {
   if (db) return db;
+  if (!MONGODB_URI) {
+    throw new Error('MONGODB_URI is missing. Add it to backend/services/.env before starting the backend.');
+  }
 
+  const dbName = getDatabaseName(MONGODB_URI);
   client = new MongoClient(MONGODB_URI);
   await client.connect();
-  db = client.db(DB_NAME);
+  db = client.db(dbName);
 
   // Create indexes for performance
   await db.collection('ticks').createIndex({ ticker: 1, time: 1 });
@@ -27,10 +46,14 @@ export async function connectDB() {
   await db.collection('leaderboard').createIndex({ portfolioValue: -1 });
   await db.collection('news').createIndex({ timestamp: -1 });
   await db.collection('users').createIndex({ email: 1 }, { unique: true });
+  await db.collection('blog_posts').createIndex({ slug: 1 }, { unique: true });
+  await db.collection('blog_posts').createIndex({ status: 1 });
+  await db.collection('blog_posts').createIndex({ author_id: 1 });
+  await db.collection('blog_posts').createIndex({ published_at: -1 });
   await db.collection('learning_progress').createIndex({ userId: 1 }, { unique: true });
   await db.collection('chatbot_conversations').createIndex({ userId: 1 }, { unique: true });
 
-  console.log(`✅ Connected to MongoDB: ${DB_NAME}`);
+  console.log(`✅ Connected to MongoDB: ${dbName}`);
   return db;
 }
 

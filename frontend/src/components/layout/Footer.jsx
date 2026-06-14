@@ -48,7 +48,7 @@ export default function Footer() {
               <h4 className="footer__column-title">Company</h4>
               <a href="#" className="footer__link">About Us</a>
               <a href="#" className="footer__link">Careers</a>
-              <a href="#" className="footer__link">Blog</a>
+              <Link to="/blogs" className="footer__link">Blog</Link>
               <a href="#" className="footer__link">Contact</a>
             </div>
             <div className="footer__column">
