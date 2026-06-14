@@ -6,6 +6,8 @@ import Landing from './pages/Landing';
 import Simulation from './pages/Simulation';
 import Portfolio from './pages/Portfolio';
 import Leaderboard from './pages/Leaderboard';
+import Contest from './pages/Contest';
+import ContestArena from './pages/ContestArena';
 import Blogs from './pages/Blogs';
 import BlogDetail from './pages/BlogDetail';
 import BlogEditor from './pages/BlogEditor';
@@ -151,6 +153,8 @@ function App() {
           <Route path="/simulation" element={<Simulation />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/contest" element={<Contest />} />
+          <Route path="/contest/arena/:contestId" element={<ContestArena />} />
           <Route path="/blogs" element={<Blogs />} />
           <Route path="/blogs/:slug" element={<BlogDetail />} />
           <Route path="/profiles/:userId" element={<UserProfile />} />

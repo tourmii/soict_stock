@@ -40,6 +40,13 @@ export const api = {
   /* Leaderboard */
   getLeaderboard: (period) => request(`/leaderboard?period=${period}`),
 
+  /* Contest */
+  getActiveContests: () => request('/contest/active'),
+  joinContest: (userId, contestId) => request('/contest/join', { method: 'POST', body: JSON.stringify({ userId, contestId }) }),
+  getContestPortfolio: (userId, contestId) => request(`/contest/portfolio?userId=${userId}&contestId=${contestId}`),
+  executeContestTrade: (trade) => request('/contest/trade', { method: 'POST', body: JSON.stringify(trade) }),
+  getContestLeaderboard: (contestId) => request(`/contest/leaderboard?contestId=${contestId}`),
+
   /* Advisor */
   chatAdvisor: (message, mode, context) =>
     request('/advisor/chat', {
