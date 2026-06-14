@@ -265,6 +265,21 @@
   color: var(--primary-dark);
 }
 
+.blog-inline-stock {
+  display: inline-flex;
+  align-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--primary-bg);
+  color: var(--primary);
+  font-weight: var(--fw-bold);
+  padding: 0 5px;
+}
+
+.blog-inline-stock:hover {
+  background: rgba(27, 59, 252, 0.12);
+  color: var(--primary-dark);
+}
+
 .blog-card__actions {
   display: flex;
   align-items: center;

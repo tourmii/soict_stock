@@ -84,18 +84,16 @@ function normalizeSingleStockTag(value) {
     .slice(0, 12);
 }
 
-function normalizeStockTags(value) {
-  if (value === undefined || value === null) return [];
-
-  const rawTags = Array.isArray(value)
-    ? value
-    : String(value).split(/[\s,;]+/);
-
+function extractStockTagsFromText(...values) {
+  const text = values.map((value) => String(value || '')).join(' ');
   const tags = [];
-  for (const rawTag of rawTags) {
-    const tag = normalizeSingleStockTag(rawTag);
+  const mentionPattern = /\$([A-Za-z][A-Za-z0-9]{0,11})\b/g;
+  let match = mentionPattern.exec(text);
+
+  while (match && tags.length < MAX_STOCK_TAGS) {
+    const tag = normalizeSingleStockTag(match[1]);
     if (tag && !tags.includes(tag)) tags.push(tag);
-    if (tags.length >= MAX_STOCK_TAGS) break;
+    match = mentionPattern.exec(text);
   }
 
   return tags;
@@ -235,9 +233,6 @@ function editableFields(input, existingPost = null) {
   if (Object.prototype.hasOwnProperty.call(input, 'cover_image_url')) {
     updates.cover_image_url = validateCoverUrl(input.cover_image_url);
   }
-  if (Object.prototype.hasOwnProperty.call(input, 'stock_tags')) {
-    updates.stock_tags = normalizeStockTags(input.stock_tags);
-  }
 
   return { updates, titleChanged };
 }
@@ -301,7 +296,7 @@ export async function createDraftPost(input, userId) {
   const excerpt = validateString(input.excerpt, 'excerpt', MAX_EXCERPT) || null;
   const content = validateString(input.content, 'content', MAX_CONTENT) || '';
   const coverImageUrl = validateCoverUrl(input.cover_image_url);
-  const stockTags = normalizeStockTags(input.stock_tags);
+  const stockTags = extractStockTagsFromText(title, excerpt, content);
   const now = new Date().toISOString();
   const slug = await uniqueSlug(slugifyTitle(title));
 
@@ -346,6 +341,17 @@ export async function updateOwnPost(id, input, userId) {
 
   if (titleChanged) {
     updates.slug = await uniqueSlug(slugifyTitle(updates.title), objectId);
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(updates, 'title')
+    || Object.prototype.hasOwnProperty.call(updates, 'excerpt')
+    || Object.prototype.hasOwnProperty.call(updates, 'content')
+  ) {
+    updates.stock_tags = extractStockTagsFromText(
+      updates.title ?? post.title,
+      updates.excerpt ?? post.excerpt,
+      updates.content ?? post.content
+    );
   }
   updates.updated_at = new Date().toISOString();
 
