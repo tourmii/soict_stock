@@ -1,14 +1,19 @@
 import { Router } from 'express';
 import {
   archiveOwnPost,
+  addCommentToPublishedPost,
   createDraftPost,
+  deleteCommentFromPublishedPost,
   deleteOwnPost,
   getPublishedPostBySlug,
+  getOptionalUserId,
+  getPublicProfileWithPosts,
   listOwnPosts,
   listPublishedPosts,
   publishOwnPost,
   requireUser,
   updateOwnPost,
+  voteOnPublishedPost,
 } from '../services/blogService.js';
 
 const router = Router();
@@ -29,8 +34,8 @@ function asyncRoute(handler) {
   };
 }
 
-router.get('/', asyncRoute(async (_req, res) => {
-  const posts = await listPublishedPosts();
+router.get('/', asyncRoute(async (req, res) => {
+  const posts = await listPublishedPosts(req.query.sort, getOptionalUserId(req), req.query.stock, req.query.author);
   res.json(posts);
 }));
 
@@ -70,8 +75,31 @@ router.delete('/:id', asyncRoute(async (req, res) => {
   res.json({ message: 'Blog post deleted' });
 }));
 
+router.post('/:id/vote', asyncRoute(async (req, res) => {
+  const { userId } = await requireUser(req);
+  const post = await voteOnPublishedPost(req.params.id, req.body?.vote, userId);
+  res.json(post);
+}));
+
+router.post('/:id/comments', asyncRoute(async (req, res) => {
+  const { user } = await requireUser(req);
+  const post = await addCommentToPublishedPost(req.params.id, req.body || {}, user);
+  res.status(201).json(post);
+}));
+
+router.delete('/:id/comments/:commentId', asyncRoute(async (req, res) => {
+  const { userId } = await requireUser(req);
+  const post = await deleteCommentFromPublishedPost(req.params.id, req.params.commentId, userId);
+  res.json(post);
+}));
+
+router.get('/profiles/:userId', asyncRoute(async (req, res) => {
+  const profile = await getPublicProfileWithPosts(req.params.userId, req.query.sort, getOptionalUserId(req));
+  res.json(profile);
+}));
+
 router.get('/:slug', asyncRoute(async (req, res) => {
-  const post = await getPublishedPostBySlug(req.params.slug);
+  const post = await getPublishedPostBySlug(req.params.slug, getOptionalUserId(req));
   if (!post) return res.status(404).json({ message: 'Blog post not found' });
   res.json(post);
 }));

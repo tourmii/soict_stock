@@ -72,8 +72,30 @@ export const api = {
   runBacktest: (strategy) => request('/advisor/backtest', { method: 'POST', body: JSON.stringify(strategy) }),
 
   /* Blogs */
-  getBlogs: () => request('/blogs'),
-  getBlog: (slug) => request(`/blogs/${encodeURIComponent(slug)}`),
+  getBlogs: (sort = 'time', userId = '', stock = '', author = '') => {
+    const params = new URLSearchParams({ sort });
+    if (userId) params.set('userId', userId);
+    if (stock) params.set('stock', stock);
+    if (author) params.set('author', author);
+    return request(`/blogs?${params.toString()}`, {
+      headers: userId ? { 'x-user-id': userId } : undefined,
+    });
+  },
+  getBlogProfile: (profileUserId, sort = 'time', viewerId = '') => {
+    const params = new URLSearchParams({ sort });
+    if (viewerId) params.set('userId', viewerId);
+    return request(`/blogs/profiles/${encodeURIComponent(profileUserId)}?${params.toString()}`, {
+      headers: viewerId ? { 'x-user-id': viewerId } : undefined,
+    });
+  },
+  getBlog: (slug, userId = '') => {
+    const params = new URLSearchParams();
+    if (userId) params.set('userId', userId);
+    const query = params.toString() ? `?${params.toString()}` : '';
+    return request(`/blogs/${encodeURIComponent(slug)}${query}`, {
+      headers: userId ? { 'x-user-id': userId } : undefined,
+    });
+  },
   getMyBlogs: (userId) => request(`/blogs/me?userId=${encodeURIComponent(userId)}`, {
     headers: { 'x-user-id': userId },
   }),
@@ -98,6 +120,21 @@ export const api = {
     body: JSON.stringify({ userId }),
   }),
   deleteBlogPost: (id, userId) => request(`/blogs/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { 'x-user-id': userId },
+    body: JSON.stringify({ userId }),
+  }),
+  voteBlogPost: (id, vote, userId) => request(`/blogs/${encodeURIComponent(id)}/vote`, {
+    method: 'POST',
+    headers: { 'x-user-id': userId },
+    body: JSON.stringify({ vote, userId }),
+  }),
+  commentBlogPost: (id, content, userId) => request(`/blogs/${encodeURIComponent(id)}/comments`, {
+    method: 'POST',
+    headers: { 'x-user-id': userId },
+    body: JSON.stringify({ content, userId }),
+  }),
+  deleteBlogComment: (id, commentId, userId) => request(`/blogs/${encodeURIComponent(id)}/comments/${encodeURIComponent(commentId)}`, {
     method: 'DELETE',
     headers: { 'x-user-id': userId },
     body: JSON.stringify({ userId }),
