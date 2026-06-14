@@ -6,6 +6,12 @@ import './Chatbot.css';
 
 const POSITION_KEY = 'soict_chatbot_position';
 const DEFAULT_MARGIN = 24;
+const FAB_SIZE = 60;
+const PANEL_MAX_WIDTH = 420;
+const PANEL_MAX_HEIGHT = 640;
+const PANEL_HORIZONTAL_MARGIN = 32;
+const PANEL_VERTICAL_MARGIN = 48;
+const VIEWPORT_GUTTER = 8;
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), Math.max(min, max));
@@ -56,14 +62,15 @@ export default function ChatbotWidget() {
 
     const clampToViewport = () => {
       const rect = widgetRef.current?.getBoundingClientRect();
-      const width = rect?.width || (isOpen ? 420 : 60);
-      const height = rect?.height || (isOpen ? 640 : 60);
+      const width = rect?.width || 60;
+      const height = rect?.height || 60;
       setPosition((current) => {
         if (!current) return current;
         const next = {
           x: clamp(current.x, 8, window.innerWidth - width - 8),
           y: clamp(current.y, 8, window.innerHeight - height - 8),
         };
+        if (next.x === current.x && next.y === current.y) return current;
         localStorage.setItem(POSITION_KEY, JSON.stringify(next));
         return next;
       });
@@ -72,7 +79,7 @@ export default function ChatbotWidget() {
     clampToViewport();
     window.addEventListener('resize', clampToViewport);
     return () => window.removeEventListener('resize', clampToViewport);
-  }, [isOpen]);
+  }, [isOpen, position]);
 
   const startDrag = (event) => {
     if (event.pointerType === 'mouse' && event.button !== 0) return;
@@ -125,12 +132,18 @@ export default function ChatbotWidget() {
     onPointerUp: endDrag,
     onPointerCancel: endDrag,
   };
+  const panelOffset = getPanelOffset(position);
 
   return (
     <div
       ref={widgetRef}
       className={`chatbot-widget ${dragRef.current.active ? 'chatbot-widget--dragging' : ''}`}
-      style={position ? { left: `${position.x}px`, top: `${position.y}px` } : undefined}
+      style={position ? {
+        left: `${position.x}px`,
+        top: `${position.y}px`,
+        '--chatbot-panel-left': `${panelOffset.x}px`,
+        '--chatbot-panel-top': `${panelOffset.y}px`,
+      } : undefined}
     >
       {isOpen && <ChatbotPanel dragHandleProps={dragHandleProps} />}
       {!isOpen && (
@@ -150,4 +163,41 @@ export default function ChatbotWidget() {
       )}
     </div>
   );
+}
+
+function getPanelOffset(position) {
+  if (!position || typeof window === 'undefined') return { x: FAB_SIZE - PANEL_MAX_WIDTH, y: FAB_SIZE - PANEL_MAX_HEIGHT };
+
+  const { width: panelWidth, height: panelHeight } = getPanelDimensions();
+  const preferredLeft = position.x + FAB_SIZE - panelWidth;
+  const spaceAbove = position.y + FAB_SIZE - VIEWPORT_GUTTER;
+  const spaceBelow = window.innerHeight - position.y - VIEWPORT_GUTTER;
+  let preferredTop = position.y + FAB_SIZE - panelHeight;
+
+  if (spaceAbove < panelHeight && spaceBelow >= panelHeight) {
+    preferredTop = position.y;
+  } else if (spaceAbove < panelHeight && spaceBelow > spaceAbove) {
+    preferredTop = position.y;
+  }
+
+  const viewportLeft = clamp(preferredLeft, VIEWPORT_GUTTER, window.innerWidth - panelWidth - VIEWPORT_GUTTER);
+  const viewportTop = clamp(preferredTop, VIEWPORT_GUTTER, window.innerHeight - panelHeight - VIEWPORT_GUTTER);
+
+  return {
+    x: viewportLeft - position.x,
+    y: viewportTop - position.y,
+  };
+}
+
+function getPanelDimensions() {
+  const compactViewport = window.innerWidth <= 520;
+
+  return {
+    width: compactViewport
+      ? window.innerWidth - 24
+      : Math.min(PANEL_MAX_WIDTH, window.innerWidth - PANEL_HORIZONTAL_MARGIN),
+    height: compactViewport
+      ? window.innerHeight - 24
+      : Math.min(PANEL_MAX_HEIGHT, window.innerHeight - PANEL_VERTICAL_MARGIN),
+  };
 }
