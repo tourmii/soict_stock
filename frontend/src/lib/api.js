@@ -47,6 +47,15 @@ export const api = {
   executeContestTrade: (trade) => request('/contest/trade', { method: 'POST', body: JSON.stringify(trade) }),
   getContestLeaderboard: (contestId) => request(`/contest/leaderboard?contestId=${contestId}`),
 
+  /* Leverage */
+  getLeveragePositions: (userId, contestId = null) => {
+    const params = new URLSearchParams({ userId });
+    if (contestId) params.set('contestId', contestId);
+    return request(`/leverage?${params.toString()}`);
+  },
+  openLeveragePosition: (body) => request('/leverage/open', { method: 'POST', body: JSON.stringify(body) }),
+  closeLeveragePosition: (body) => request('/leverage/close', { method: 'POST', body: JSON.stringify(body) }),
+
   /* Advisor */
   chatAdvisor: (message, mode, context) =>
     request('/advisor/chat', {

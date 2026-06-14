@@ -17,6 +17,7 @@ import scenarioRoutes from './routes/scenarios.js';
 import newsRoutes from './routes/news.js';
 import authRoutes from './routes/auth.js';
 import contestRoutes from './routes/contest.js';
+import leverageRoutes, { checkLiquidations } from './routes/leverage.js';
 import blogRoutes from './routes/blogs.js';
 import learningRoutes from './routes/learning.js';
 import chatbotRoutes from './routes/chatbot.js';
@@ -56,6 +57,7 @@ async function main() {
   app.use('/api/blogs',       blogRoutes);
   app.use('/api/learning',    learningRoutes);
   app.use('/api/chatbot',     chatbotRoutes);
+  app.use('/api/leverage',    leverageRoutes);
 
   app.get('/api/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
 
@@ -75,7 +77,7 @@ async function main() {
   // generates 1 calendar year of 5-min bars for all tickers.
   await engine.initialize((progress) => broadcastProgress(progress));
 
-  // Inject custom contest stocks if any active contest exists
+  // Inject custom contest stocks with scenario overrides
   const db = getDb();
   const activeContests = await db.collection('contests').find({ status: 'active' }).toArray();
   for (const contest of activeContests) {
@@ -84,6 +86,10 @@ async function main() {
     const stocksToAdd = contest.customStocks.filter((s) => !existingTickers.has(s.ticker));
     if (stocksToAdd.length === 0) continue;
 
+    for (const stock of stocksToAdd) {
+      engine.momentum[stock.ticker]   = 0;
+      engine.volCluster[stock.ticker] = 1;
+    }
     engine.stocks = [...engine.stocks, ...stocksToAdd];
     console.log(`📈 Injected ${stocksToAdd.length} custom stocks from contest '${contest.name}'`);
 
@@ -94,6 +100,12 @@ async function main() {
       );
       engine.prices[stock.ticker] = latestTick ? latestTick.price : stock.basePrice;
     }
+
+    // Apply scenario overrides so real-time ticks reflect the contest scenario
+    if (contest.scenario) {
+      engine.applyTickerScenario(stocksToAdd.map((s) => s.ticker), contest.scenario);
+      console.log(`🎭 Scenario '${contest.scenario.name}' applied to ${stocksToAdd.length} stocks`);
+    }
   }
 
   await broadcastReady();
@@ -101,6 +113,10 @@ async function main() {
   // Start real-time simulation (3-second tick loop) and news injection
   engine.start();
   newsInjector.start();
+
+  // Liquidation check every 30 seconds
+  const db30 = getDb();
+  setInterval(() => checkLiquidations(db30, engine), 30_000);
 }
 
 main().catch((err) => {

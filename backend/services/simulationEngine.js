@@ -83,6 +83,7 @@ export class SimulationEngine {
     // Per-stock real-time state
     this.momentum   = {}; // extra annual drift from recent price direction
     this.volCluster = {}; // vol multiplier (1 = normal, > 1 after shock)
+    this.tickerOverrides = {}; // per-ticker { driftBoost, volMult } for contest scenarios
   }
 
   /* ─── Startup ─────────────────────────────────────────────── */
@@ -301,9 +302,10 @@ export class SimulationEngine {
       const deviation    = Math.log(prevPrice / stock.basePrice);
       const meanRevDrift = -MEAN_REV_SPEED_RT * deviation;
 
-      // Composite drift and vol
-      const effectiveDrift = stock.drift + regimeDrift + (this.momentum[ticker] || 0) + meanRevDrift;
-      const effectiveVol   = stock.volatility * regimeVolMul * (this.volCluster[ticker] || 1);
+      // Composite drift and vol (including per-ticker scenario overrides)
+      const tickerOvr      = this.tickerOverrides[ticker] || {};
+      const effectiveDrift = stock.drift + regimeDrift + (tickerOvr.driftBoost || 0) + (this.momentum[ticker] || 0) + meanRevDrift;
+      const effectiveVol   = stock.volatility * regimeVolMul * (tickerOvr.volMult || 1) * (this.volCluster[ticker] || 1);
 
       // GBM step — no Poisson jumps in real-time; discrete events go through applyShock()
       const logStep = (effectiveDrift - 0.5 * effectiveVol ** 2) * DT_REALTIME
@@ -374,6 +376,18 @@ export class SimulationEngine {
     this.regime = regime;
     this.driftOverrides        = params.driftOverrides        || {};
     this.volatilityMultipliers = params.volatilityMultipliers || {};
+  }
+
+  applyTickerScenario(tickers, params) {
+    for (const ticker of tickers) {
+      this.tickerOverrides[ticker] = { driftBoost: params.driftBoost || 0, volMult: params.volMult || 1 };
+      this.momentum[ticker]   = this.momentum[ticker]   || 0;
+      this.volCluster[ticker] = this.volCluster[ticker] || 1;
+    }
+  }
+
+  removeTickerScenario(tickers) {
+    for (const ticker of tickers) delete this.tickerOverrides[ticker];
   }
 
   applyShock(ticker, shockPercent) {
