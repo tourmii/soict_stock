@@ -17,9 +17,11 @@ export default function ContestStockChart() {
   const selectedTicker = useMarketStore((s) => s.selectedTicker);
   const rawTicks = useMarketStore((s) => s.rawTicks);
   const prices = useMarketStore((s) => s.prices);
-  const getChange = useMarketStore((s) => s.getChange);
+  const getDailyChange = useMarketStore((s) => s.getDailyChange);
   const setSelectedTicker = useMarketStore((s) => s.setSelectedTicker);
-  const getOHLCV = useMarketStore((s) => s.getOHLCV);
+  const historicalOHLCV = useMarketStore((s) => s.historicalOHLCV);
+  const getOHLCVWithHistory = useMarketStore((s) => s.getOHLCVWithHistory);
+  const fetchHistoricalOHLCV = useMarketStore((s) => s.fetchHistoricalOHLCV);
 
   const currentContest = useContestStore((s) => s.currentContest);
   const allowedTickers = currentContest?.allowedTickers || [];
@@ -34,12 +36,17 @@ export default function ContestStockChart() {
   }, [allowedTickers, selectedTicker, setSelectedTicker]);
 
   const stock = STOCKS.find((s) => s.ticker === selectedTicker) || currentContest?.customStocks?.find(s => s.ticker === selectedTicker);
-  const { change, changePercent } = getChange(selectedTicker);
+  const { change, changePercent } = getDailyChange(selectedTicker);
+
+  const LONG_TF = new Set(['4H', '1D', '1W', '1M']);
+  useEffect(() => {
+    if (LONG_TF.has(timeframe)) fetchHistoricalOHLCV(selectedTicker, timeframe);
+  }, [selectedTicker, timeframe]);
 
   // Aggregate raw ticks into OHLCV bars for the selected timeframe
   const ohlcvBars = useMemo(() => {
-    return getOHLCV(selectedTicker, timeframe);
-  }, [selectedTicker, rawTicks, timeframe, getOHLCV]);
+    return getOHLCVWithHistory(selectedTicker, timeframe);
+  }, [selectedTicker, rawTicks, historicalOHLCV, timeframe, getOHLCVWithHistory]);
 
   // Determine how many bars to display based on timeframe
   const displayBars = useMemo(() => {
@@ -52,8 +59,7 @@ export default function ContestStockChart() {
     if (!chartContainerRef.current) return;
 
     const chart = createChart(chartContainerRef.current, {
-      width: chartContainerRef.current.clientWidth,
-      height: 380,
+      autoSize: true,
       layout: { background: { color: '#ffffff' }, textColor: '#6B7280', fontFamily: 'DM Sans' },
       grid: { vertLines: { color: '#F3F4F6' }, horzLines: { color: '#F3F4F6' } },
       crosshair: { mode: 0 },
@@ -147,7 +153,7 @@ export default function ContestStockChart() {
   }, [displayBars]);
 
   return (
-    <div className="card" style={{padding:0,overflow:'hidden'}}>
+    <div className="card" style={{padding:0,overflow:'hidden', display: 'flex', flexDirection: 'column', height: '100%'}}>
       <div style={{padding:'16px 20px',borderBottom:'var(--border-light)',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:'12px'}}>
         <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
           <select value={selectedTicker} onChange={(e)=>setSelectedTicker(e.target.value)} className="input select" style={{width:'auto',padding:'6px 30px 6px 10px',fontWeight:600,fontSize:'var(--text-sm)'}}>
@@ -160,7 +166,7 @@ export default function ContestStockChart() {
           <div>
             <span style={{fontSize:'var(--text-xl)',fontWeight:700}}>{formatCurrency(prices[selectedTicker] || 0)}</span>
             <span className={`badge ${changePercent>=0?'badge-green':'badge-red'}`} style={{marginLeft:'8px',fontSize:'11px'}}>
-              {changePercent>=0?'↑':'↓'} {formatPercentRaw(Math.abs(changePercent))}
+              {changePercent>=0?'▲':'▼'} {formatCurrency(Math.abs(change))} ({changePercent>=0?'+':''}{changePercent.toFixed(2)}%)
             </span>
           </div>
         </div>
@@ -172,7 +178,7 @@ export default function ContestStockChart() {
           ))}
         </div>
       </div>
-      <div ref={chartContainerRef} style={{width:'100%'}}/>
+      <div ref={chartContainerRef} style={{flex: 1, minHeight: 0}}/>
     </div>
   );
 }

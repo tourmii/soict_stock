@@ -5,6 +5,9 @@ import { useAuthStore } from '../store/authStore';
 import ContestStockChart from '../components/simulation/ContestStockChart';
 import ContestOrderForm from '../components/simulation/ContestOrderForm';
 import ContestPortfolioPanel from '../components/simulation/ContestPortfolioPanel';
+import OrderBookView from '../components/simulation/OrderBook';
+import TimeSales from '../components/simulation/TimeSales';
+import './Simulation.css';
 
 export default function ContestArena() {
   const navigate = useNavigate();
@@ -96,7 +99,7 @@ export default function ContestArena() {
   }
 
   return (
-    <div className="simulation animate-fade-in" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', background: 'var(--bg-page)' }}>
+    <div className="exchange animate-fade-in">
       {/* Premium Arena Top Bar */}
       <div style={{ 
         height: '70px', 
@@ -109,6 +112,7 @@ export default function ContestArena() {
         justifyContent: 'space-between', 
         zIndex: 10,
         color: 'white',
+        flexShrink: 0,
         boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
@@ -131,49 +135,57 @@ export default function ContestArena() {
         </div>
       </div>
 
-      <div className="simulation__layout container" style={{ paddingTop: '20px', paddingBottom: '20px' }}>
+      <div className="exchange__body">
         {/* Left: Leaderboard */}
-        <aside className="simulation__left" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <div className="card" style={{ height: '100%', overflowY: 'auto', padding: '1.25rem', borderTop: '4px solid var(--primary)' }}>
-            <h3 style={{ fontSize: 'var(--text-md)', fontWeight: '800', borderBottom: '1px solid var(--border-light)', paddingBottom: '1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+        <aside className="exchange__watchlist">
+          <div className="watchlist" style={{ flex: 1, padding: 0, display: 'flex', flexDirection: 'column' }}>
+            <div className="panel-header" style={{ padding: '12px 16px', background: 'var(--white)', display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', borderBottom: '1px solid var(--border-light)', flexShrink: 0 }}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
               Live Leaderboard
-            </h3>
-            {leaderboard.length === 0 ? (
-              <p className="text-muted text-sm text-center" style={{ padding: '2rem 0' }}>Waiting for traders...</p>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                {leaderboard.map((lb, index) => {
-                  const isYou = lb.userId === user?.id;
-                  const rankColor = index === 0 ? '#F59E0B' : index === 1 ? '#9CA3AF' : index === 2 ? '#B45309' : 'var(--gray-400)';
-                  
-                  return (
-                    <div key={lb.userId} className="animate-fade-in-up" style={{ animationDelay: `${index * 0.05}s`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', background: isYou ? 'var(--primary-bg)' : 'transparent', borderRadius: 'var(--radius-md)', border: isYou ? '1px solid rgba(27,59,252,0.2)' : '1px solid transparent', transition: 'all 0.2s', ':hover': { background: 'var(--gray-50)' } }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <span style={{ fontWeight: '800', color: rankColor, width: '16px', textAlign: 'center', fontSize: '13px' }}>{index + 1}</span>
-                        <div style={{ fontWeight: isYou ? 'bold' : '600', fontSize: '13px', color: isYou ? 'var(--primary)' : 'var(--gray-700)' }}>
-                          {isYou ? 'You' : `Trader_${lb.userId.substring(0, 4)}`}
+            </div>
+            <div style={{ overflowY: 'auto', flex: 1, padding: '12px' }}>
+              {leaderboard.length === 0 ? (
+                <p className="text-muted text-sm text-center" style={{ padding: '2rem 0' }}>Waiting for traders...</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {leaderboard.map((lb, index) => {
+                    const isYou = lb.userId === user?.id;
+                    const rankColor = index === 0 ? '#F59E0B' : index === 1 ? '#9CA3AF' : index === 2 ? '#B45309' : 'var(--gray-400)';
+                    
+                    return (
+                      <div key={lb.userId} className="animate-fade-in-up" style={{ animationDelay: `${index * 0.05}s`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', background: isYou ? 'var(--primary-bg)' : 'transparent', borderRadius: 'var(--radius-md)', border: isYou ? '1px solid rgba(27,59,252,0.2)' : '1px solid transparent', transition: 'all 0.2s', ':hover': { background: 'var(--gray-50)' } }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                          <span style={{ fontWeight: '800', color: rankColor, width: '16px', textAlign: 'center', fontSize: '13px' }}>{index + 1}</span>
+                          <div style={{ fontWeight: isYou ? 'bold' : '600', fontSize: '13px', color: isYou ? 'var(--primary)' : 'var(--gray-700)' }}>
+                            {isYou ? 'You' : `Trader_${lb.userId.substring(0, 4)}`}
+                          </div>
+                        </div>
+                        <div className={lb.returnPct >= 0 ? 'text-green' : 'text-red'} style={{ fontWeight: '800', fontSize: '14px', fontFamily: 'monospace' }}>
+                          ${(lb.portfolioValue / 1000).toFixed(1)}k
                         </div>
                       </div>
-                      <div className={lb.returnPct >= 0 ? 'text-green' : 'text-red'} style={{ fontWeight: '800', fontSize: '14px', fontFamily: 'monospace' }}>
-                        ${(lb.portfolioValue / 1000).toFixed(1)}k
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
         </aside>
 
-        {/* Center: Chart & Order */}
-        <main className="simulation__center" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          <ContestStockChart />
-          <ContestOrderForm />
+        {/* Center: Chart & Order Book / Time Sales */}
+        <main className="exchange__main">
+          <div className="exchange__chart-wrap">
+            <ContestStockChart />
+          </div>
+          <div className="exchange__lower">
+            <OrderBookView />
+            <TimeSales />
+          </div>
         </main>
 
-        {/* Right: Portfolio */}
-        <aside className="simulation__right">
+        {/* Right: Order Form & Portfolio */}
+        <aside className="exchange__sidebar">
+          <ContestOrderForm />
           <ContestPortfolioPanel />
         </aside>
       </div>

@@ -55,17 +55,22 @@ async function getOrCreateDefaultContests(db, engine) {
         const stocksToAdd = customStocks.filter(s => !existingTickers.has(s.ticker));
         
         if (stocksToAdd.length > 0) {
+          // Prevent tick() race condition by initializing prices first
+          for (const stock of stocksToAdd) {
+            engine.prices[stock.ticker] = stock.basePrice;
+          }
+          
           engine.stocks = [...engine.stocks, ...stocksToAdd];
           
           for (const stock of stocksToAdd) {
-            if (!engine.prices[stock.ticker]) {
-              console.log(`⏳ Generating history for custom contest stock ${stock.ticker}...`);
-              const ticks = engine._generateHistoricalTicks(stock, 90);
+            console.log(`⏳ Generating history for custom contest stock ${stock.ticker}...`);
+              const now = Math.floor(Date.now() / 1000);
+              const historyStart = now - 90 * 86400; // 90 days ago
+              const ticks = engine._generateHistory(stock, now, historyStart);
               if (ticks.length > 0) {
                 await db.collection('ticks').insertMany(ticks, { ordered: false });
                 engine.prices[stock.ticker] = ticks[ticks.length - 1].price;
               }
-            }
           }
         }
       }

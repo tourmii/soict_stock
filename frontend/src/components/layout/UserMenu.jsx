@@ -52,14 +52,12 @@ export default function UserMenu() {
             </div>
           </div>
           <div className="user-menu__divider" />
-          <Link className="user-menu__item" to="/my-blogs" onClick={() => setOpen(false)}>
+          <Link className="user-menu__item" to={`/profiles/${user.id}`} onClick={() => setOpen(false)}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M4 19.5V4.5A2.5 2.5 0 0 1 6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5Z"></path>
-              <path d="M8 7h8"></path>
-              <path d="M8 11h8"></path>
-              <path d="M8 15h5"></path>
+              <circle cx="12" cy="8" r="4"></circle>
+              <path d="M4 21a8 8 0 0 1 16 0"></path>
             </svg>
-            My Blog Posts
+            Profile
           </Link>
           <button className="user-menu__item" onClick={handleSignOut}>
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
