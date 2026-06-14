@@ -1,12 +1,21 @@
 /**
- * News Service — fetches real news from GNews API
- * and determines which stocks are affected using keyword matching.
+ * News Service — fetches real financial news from multiple APIs
+ * and determines which stocks are affected via keyword matching.
+ *
+ * Sources (all optional, configured via env vars):
+ *   GNEWS_API_KEY      — https://gnews.io            (free: 100 req/day)
+ *   MARKETAUX_API_KEY  — https://marketaux.com        (free: 100 req/day)
+ *
+ * Article IDs are derived from URL so the same article is never stored twice,
+ * even across server restarts or re-fetches.
  */
 
 import https from 'https';
+import { createHash } from 'crypto';
 import { STOCK_SECTORS, SECTOR_TICKERS } from './stockData.js';
 
-// Keyword-to-stock mapping for the impact engine
+/* ── Keyword mapping ─────────────────────────────────────────── */
+
 const SECTOR_KEYWORDS = {
   Technology: [
     'tech', 'technology', 'software', 'AI', 'artificial intelligence', 'chip', 'semiconductor',
@@ -39,14 +48,12 @@ const SECTOR_KEYWORDS = {
   ],
 };
 
-// Market-wide keywords that affect all stocks
 const MARKET_WIDE_KEYWORDS = [
   'recession', 'crash', 'rally', 'S&P', 'Dow', 'Nasdaq', 'global market',
   'tariff', 'trade war', 'sanctions', 'geopolitical', 'war', 'crisis',
   'stimulus', 'quantitative easing', 'shutdown', 'default',
 ];
 
-// Sentiment keywords
 const POSITIVE_KEYWORDS = [
   'surge', 'jump', 'soar', 'rally', 'gain', 'rise', 'record', 'boom', 'bull',
   'upgrade', 'beats', 'exceeds', 'growth', 'optimism', 'breakthrough', 'approval',
@@ -60,160 +67,192 @@ const NEGATIVE_KEYWORDS = [
   'slump', 'tumble', 'collapse', 'warning', 'risk',
 ];
 
+/* ── Analysis helper ─────────────────────────────────────────── */
+
 /**
- * Analyze a news headline to determine:
- * - Which stocks/sectors it affects
- * - Sentiment (positive/negative/neutral)
- * - Impact magnitude
+ * Returns a stable, URL-derived article ID so the same article fetched
+ * in multiple API cycles always gets the same ID.
  */
-function analyzeHeadline(title, description = '') {
+function stableId(url, title) {
+  const source = url || title || String(Date.now());
+  return createHash('sha1').update(source).digest('hex').slice(0, 24);
+}
+
+/**
+ * Analyze a news headline to determine affected tickers, sentiment, and impact.
+ * Impact is capped at ±3.5 % for sector news, ±1.75 % for market-wide.
+ */
+export function analyzeHeadline(title, description = '') {
   const text = `${title} ${description}`.toLowerCase();
 
-  // Check market-wide impact
   const isMarketWide = MARKET_WIDE_KEYWORDS.some((kw) => text.includes(kw.toLowerCase()));
 
-  // Find affected sectors
   const affectedSectors = new Set();
   for (const [sector, keywords] of Object.entries(SECTOR_KEYWORDS)) {
-    for (const kw of keywords) {
-      if (text.includes(kw.toLowerCase())) {
-        affectedSectors.add(sector);
-        break;
-      }
+    if (keywords.some((kw) => text.includes(kw.toLowerCase()))) {
+      affectedSectors.add(sector);
     }
   }
 
-  // Map sectors to tickers using the shared mapping
   const affectedTickers = [];
   if (isMarketWide) {
     affectedTickers.push(...Object.keys(STOCK_SECTORS));
   } else {
     for (const sector of affectedSectors) {
-      if (SECTOR_TICKERS[sector]) {
-        affectedTickers.push(...SECTOR_TICKERS[sector]);
-      }
+      if (SECTOR_TICKERS[sector]) affectedTickers.push(...SECTOR_TICKERS[sector]);
     }
   }
 
-  // Determine sentiment
   let positiveScore = 0;
   let negativeScore = 0;
-  for (const kw of POSITIVE_KEYWORDS) {
-    if (text.includes(kw.toLowerCase())) positiveScore++;
-  }
-  for (const kw of NEGATIVE_KEYWORDS) {
-    if (text.includes(kw.toLowerCase())) negativeScore++;
-  }
+  for (const kw of POSITIVE_KEYWORDS) if (text.includes(kw.toLowerCase())) positiveScore++;
+  for (const kw of NEGATIVE_KEYWORDS) if (text.includes(kw.toLowerCase())) negativeScore++;
 
   let sentiment = 'neutral';
   if (positiveScore > negativeScore) sentiment = 'positive';
   else if (negativeScore > positiveScore) sentiment = 'negative';
 
-  // Calculate impact magnitude (0 to 0.05)
+  // Impact: 0.5 % base, up to 3.5 % for strong signals (capped at 5 keywords)
   const strength = Math.min(Math.max(positiveScore, negativeScore), 5) / 5;
-  const impact = (sentiment === 'positive' ? 1 : -1) * (0.005 + strength * 0.03);
+  const rawImpact = (sentiment === 'positive' ? 1 : -1) * (0.005 + strength * 0.030);
+  const impact = isMarketWide ? rawImpact * 0.5 : rawImpact;
 
-  return {
-    affectedTickers,
-    isMarketWide,
-    sentiment,
-    impact: isMarketWide ? impact * 0.5 : impact,
-  };
+  return { affectedTickers, isMarketWide, sentiment, impact };
 }
 
+/* ── HTTP helper ─────────────────────────────────────────────── */
+
+function requestJson(url, timeoutMs = 8000) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { family: 4, headers: { accept: 'application/json' } }, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (chunk) => { body += chunk; });
+      res.on('end', () => resolve({
+        ok: res.statusCode >= 200 && res.statusCode < 300,
+        status: res.statusCode,
+        json: () => JSON.parse(body || '{}'),
+      }));
+    });
+    req.setTimeout(timeoutMs, () => {
+      const err = new Error('Request timed out');
+      err.code = 'ETIMEDOUT';
+      req.destroy(err);
+    });
+    req.on('error', reject);
+  });
+}
+
+/* ── NewsService ─────────────────────────────────────────────── */
+
 export class NewsService {
-  constructor(apiKey) {
-    this.apiKey = apiKey;
+  constructor(gnewsApiKey, marketauxApiKey = '') {
+    this.gnewsKey     = gnewsApiKey || process.env.GNEWS_API_KEY || '';
+    this.marketauxKey = marketauxApiKey || process.env.MARKETAUX_API_KEY || '';
     this.cachedArticles = [];
     this.lastFetch = 0;
     this.fetchInterval = 10 * 60 * 1000; // 10 minutes between API calls
   }
 
-  async _requestJson(url, timeoutMs = 8000) {
-    return new Promise((resolve, reject) => {
-      const request = https.get(url, {
-        family: 4,
-        headers: {
-          accept: 'application/json',
-        },
-      }, (response) => {
-        let body = '';
-
-        response.setEncoding('utf8');
-        response.on('data', (chunk) => {
-          body += chunk;
-        });
-        response.on('end', () => {
-          resolve({
-            ok: response.statusCode >= 200 && response.statusCode < 300,
-            status: response.statusCode,
-            json: async () => JSON.parse(body || '{}'),
-          });
-        });
-      });
-
-      request.setTimeout(timeoutMs, () => {
-        const timeoutError = new Error('Request timed out');
-        timeoutError.code = 'ETIMEDOUT';
-        request.destroy(timeoutError);
-      });
-
-      request.on('error', reject);
-    });
-  }
-
   async fetchNews() {
-    // Rate limit: only fetch every 10 minutes
     const now = Date.now();
     if (now - this.lastFetch < this.fetchInterval && this.cachedArticles.length > 0) {
       return this.cachedArticles;
     }
 
-    if (!this.apiKey) {
-      return [];
+    const results = await Promise.allSettled([
+      this._fetchGNews(),
+      this._fetchMarketaux(),
+    ]);
+
+    // Merge and deduplicate by stable ID
+    const seen = new Set();
+    const merged = [];
+    for (const r of results) {
+      if (r.status === 'fulfilled') {
+        for (const a of r.value) {
+          if (!seen.has(a.id)) {
+            seen.add(a.id);
+            merged.push(a);
+          }
+        }
+      }
     }
 
-    try {
-      const url = `https://gnews.io/api/v4/search?q=stock+market+finance&lang=en&max=10&token=${this.apiKey}`;
-      const response = await this._requestJson(url, 8000);
-
-      if (!response.ok) {
-        console.warn(`📰 GNews API returned ${response.status} — using fallback news`);
-        return this.cachedArticles;
-      }
-
-      const data = await response.json();
-      const articles = (data.articles || []).map((article) => {
-        const analysis = analyzeHeadline(article.title, article.description);
-
-        return {
-          id: Date.now().toString() + Math.random().toString(36).substr(2, 5),
-          headline: article.title,
-          description: article.description || '',
-          url: article.url,
-          source: article.source?.name || 'Unknown',
-          image: article.image || null,
-          publishedAt: article.publishedAt,
-          timestamp: article.publishedAt || new Date().toISOString(),
-          ...analysis,
-        };
-      });
-
-      this.cachedArticles = articles;
+    if (merged.length > 0) {
+      this.cachedArticles = merged;
       this.lastFetch = now;
-      console.log(`📰 Fetched ${articles.length} real news articles from GNews`);
-      return articles;
+      console.log(`📰 News pool: ${merged.length} articles`);
+    }
+
+    return this.cachedArticles;
+  }
+
+  async _fetchGNews() {
+    if (!this.gnewsKey) return [];
+    try {
+      const url = `https://gnews.io/api/v4/search?q=stock+market+finance&lang=en&max=10&token=${this.gnewsKey}`;
+      const res = await requestJson(url);
+      if (!res.ok) {
+        console.warn(`📰 GNews returned ${res.status}`);
+        return [];
+      }
+      const data = res.json();
+      return (data.articles || []).map((a) => this._normalizeGNews(a));
     } catch (err) {
-      // Silently fall back on network errors (ETIMEDOUT, AbortError, etc.)
-      const reason = err.name === 'AbortError' ? 'timeout' : (err.cause?.code || err.message);
-      console.warn(`📰 GNews fetch failed (${reason}) — using fallback news`);
-      return this.cachedArticles;
+      console.warn(`📰 GNews fetch failed (${err.code || err.message})`);
+      return [];
     }
   }
 
-  getLatest(limit = 10) {
+  _normalizeGNews(article) {
+    const analysis = analyzeHeadline(article.title, article.description);
+    return {
+      id:          stableId(article.url, article.title),
+      headline:    article.title,
+      description: article.description || '',
+      url:         article.url || null,
+      source:      article.source?.name || 'GNews',
+      image:       article.image || null,
+      publishedAt: article.publishedAt,
+      timestamp:   article.publishedAt || new Date().toISOString(),
+      ...analysis,
+    };
+  }
+
+  async _fetchMarketaux() {
+    if (!this.marketauxKey) return [];
+    try {
+      const url = `https://api.marketaux.com/v1/news/all?filter_entities=true&language=en&limit=10&api_token=${this.marketauxKey}`;
+      const res = await requestJson(url);
+      if (!res.ok) {
+        console.warn(`📰 Marketaux returned ${res.status}`);
+        return [];
+      }
+      const data = res.json();
+      return (data.data || []).map((a) => this._normalizeMarketaux(a));
+    } catch (err) {
+      console.warn(`📰 Marketaux fetch failed (${err.code || err.message})`);
+      return [];
+    }
+  }
+
+  _normalizeMarketaux(article) {
+    const analysis = analyzeHeadline(article.title, article.description);
+    return {
+      id:          stableId(article.url, article.title),
+      headline:    article.title,
+      description: article.description || '',
+      url:         article.url || null,
+      source:      article.source || 'Marketaux',
+      image:       article.image_url || null,
+      publishedAt: article.published_at,
+      timestamp:   article.published_at || new Date().toISOString(),
+      ...analysis,
+    };
+  }
+
+  getLatest(limit = 20) {
     return this.cachedArticles.slice(0, limit);
   }
 }
-
-export { analyzeHeadline };

@@ -88,16 +88,166 @@ export const SCENARIOS = [
 ];
 
 export const NEWS_TEMPLATES = [
-  { type: 'earnings_positive', headline: '{company} Reports Record Q4 Earnings, Beats Estimates by 15%', impact: [0.05, 0.15], sentiment: 'positive' },
-  { type: 'earnings_negative', headline: '{company} Misses Revenue Expectations, Shares Under Pressure', impact: [-0.05, -0.15], sentiment: 'negative' },
-  { type: 'fed_rate_hike', headline: 'Federal Reserve Raises Interest Rates by 25 Basis Points', impact: [-0.02, -0.05], sentiment: 'negative', sectorWide: true },
-  { type: 'fed_rate_cut', headline: 'Fed Cuts Rates in Surprise Move, Markets Rally', impact: [0.02, 0.05], sentiment: 'positive', sectorWide: true },
-  { type: 'product_launch', headline: '{company} Unveils Revolutionary AI Platform, Analysts Upgrade', impact: [0.03, 0.08], sentiment: 'positive' },
-  { type: 'ceo_departure', headline: '{company} CEO Steps Down Amid Board Disagreements', impact: [-0.03, -0.08], sentiment: 'negative' },
-  { type: 'merger', headline: '{company} Announces Strategic Merger, Creating Industry Giant', impact: [0.04, 0.12], sentiment: 'positive' },
-  { type: 'black_swan', headline: 'BREAKING: Global Supply Chain Crisis Triggers Market Selloff', impact: [-0.15, -0.25], sentiment: 'negative', sectorWide: true },
-  { type: 'regulation', headline: 'New Regulatory Framework Benefits {company} Market Position', impact: [0.02, 0.06], sentiment: 'positive' },
-  { type: 'analyst_upgrade', headline: 'Goldman Sachs Upgrades {company} to Strong Buy, PT $200', impact: [0.02, 0.05], sentiment: 'positive' },
+  // ── Earnings ───────────────────────────────────────────────────────────────
+  {
+    type: 'earnings_positive',
+    headline: '{company} Beats {quarter} Earnings Estimates by {beatPct}%, Raises Full-Year Guidance',
+    description: '{fullName} reported earnings per share of ${eps}, beating the analyst consensus by {beatPct}%. Revenue grew {revGrowth}% year-over-year on strong demand across its core {sector} segments. Management raised full-year guidance, citing continued market momentum and improving margins.',
+    impact: [0.02, 0.06],
+    sentiment: 'positive',
+    source: '{analystFirm}',
+  },
+  {
+    type: 'earnings_negative',
+    headline: '{company} Misses {quarter} Revenue Forecast, Trims Outlook on Macro Headwinds',
+    description: '{fullName} reported quarterly revenue of ${revenue}B, falling short of the ${consensusRevenue}B analyst consensus. Management cited macroeconomic headwinds and softening demand in key markets. The company did not provide updated guidance, adding to investor uncertainty heading into the next quarter.',
+    impact: [-0.02, -0.06],
+    sentiment: 'negative',
+    source: '{analystFirm}',
+  },
+
+  // ── Analyst Actions ────────────────────────────────────────────────────────
+  {
+    type: 'analyst_upgrade',
+    headline: '{analystFirm} Upgrades {company} to Buy, Raises Price Target to ${target}',
+    description: 'Analysts at {analystFirm} upgraded {fullName} from Neutral to Buy and raised their 12-month price target to ${target}, implying {upside}% upside from current levels. The firm cited improving fundamentals, compelling valuation after a recent pullback, and strong positioning within the {sector} sector.',
+    impact: [0.015, 0.04],
+    sentiment: 'positive',
+    source: '{analystFirm}',
+  },
+  {
+    type: 'analyst_downgrade',
+    headline: '{analystFirm} Downgrades {company} to Hold, Cuts PT on Margin Pressure',
+    description: '{analystFirm} downgraded {fullName} from Buy to Hold and reduced its price target to ${target}, citing near-term margin compression and slowing growth in the company\'s core {sector} business. The firm noted that near-term risks appear underappreciated at current valuation multiples.',
+    impact: [-0.015, -0.04],
+    sentiment: 'negative',
+    source: '{analystFirm}',
+  },
+
+  // ── Corporate Events ───────────────────────────────────────────────────────
+  {
+    type: 'product_launch',
+    headline: '{company} Unveils Next-Gen Platform; {analystFirm} Sees {upside}% Upside',
+    description: '{fullName} announced the launch of its next-generation product suite at its annual developer conference. Analysts at {analystFirm} raised their price target to ${target}, citing the platform\'s potential to expand {company}\'s addressable market by an estimated {tamExpansion}%. Shares jumped {beatPct}% in after-hours trading.',
+    impact: [0.015, 0.05],
+    sentiment: 'positive',
+    source: '{analystFirm}',
+  },
+  {
+    type: 'merger',
+    headline: '{company} Agrees to ${dealSize}B Merger at {premium}% Premium to Last Close',
+    description: '{fullName} announced it has entered into a definitive merger agreement valued at approximately ${dealSize}B, representing a {premium}% premium to the company\'s 30-day volume-weighted average price. The deal is subject to regulatory review and is expected to close within 9–12 months. Analysts say the combination creates meaningful synergies in the {sector} space.',
+    impact: [0.03, 0.08],
+    sentiment: 'positive',
+    source: 'Bloomberg',
+  },
+  {
+    type: 'ceo_departure',
+    headline: '{company} CEO Steps Down; Board Launches Nationwide Search for Successor',
+    description: '{fullName} announced that its Chief Executive Officer will step down effective at the end of next quarter, following reported strategic disagreements with the board of directors. An interim CEO drawn from the existing board will oversee day-to-day operations while the search is conducted. Analysts say the sudden departure introduces execution risk in a critical period.',
+    impact: [-0.02, -0.05],
+    sentiment: 'negative',
+    source: 'WSJ',
+  },
+  {
+    type: 'buyback',
+    headline: '{company} Announces ${dealSize}B Share Buyback Program, Signals Confidence',
+    description: '{fullName}\'s board of directors authorized a new share repurchase program of up to ${dealSize}B, representing approximately {premium}% of its current market capitalization. Management said the buyback reflects strong free cash flow generation and conviction in the company\'s long-term growth outlook in the {sector} sector.',
+    impact: [0.01, 0.035],
+    sentiment: 'positive',
+    source: 'Reuters',
+  },
+
+  // ── Macro / Fed ────────────────────────────────────────────────────────────
+  {
+    type: 'fed_rate_hike',
+    headline: 'Federal Reserve Raises Rates 25 bps, Signals Data-Dependent Path Ahead',
+    description: 'The FOMC voted to raise the federal funds rate by 25 basis points, bringing it to a {years}-year high. Chair Powell emphasized that future decisions will remain data-dependent, and that the committee is prepared to hold rates higher for longer if inflation does not return sustainably to the 2% target. Rate-sensitive sectors sold off on the news.',
+    impact: [-0.01, -0.03],
+    sentiment: 'negative',
+    sectorWide: true,
+    source: 'Reuters',
+  },
+  {
+    type: 'fed_rate_cut',
+    headline: 'Fed Cuts Rates 25 bps as Inflation Cools, Equity Markets Rally Broadly',
+    description: 'The Federal Reserve lowered the federal funds rate by 25 basis points, citing easing inflation and softening labor market conditions. Chair Powell described the move as a recalibration, not a signal of economic weakness. Equity markets surged, with growth and technology stocks leading gains as investors priced in additional cuts later this year.',
+    impact: [0.01, 0.03],
+    sentiment: 'positive',
+    sectorWide: true,
+    source: 'Bloomberg',
+  },
+  {
+    type: 'inflation_data',
+    headline: 'CPI Cools to {cpi}% — Below Estimates — Fueling Rate-Cut Optimism',
+    description: 'The Bureau of Labor Statistics reported that the Consumer Price Index rose {cpi}% year-over-year last month, down from {prevCpi}% in the prior reading and below the {consensusGdp}% economist consensus. Core inflation also moderated. The softer data boosted expectations that the Fed may have room to cut rates earlier than previously anticipated, lifting risk assets broadly.',
+    impact: [0.01, 0.025],
+    sentiment: 'positive',
+    sectorWide: true,
+    source: 'CNBC',
+  },
+  {
+    type: 'gdp_miss',
+    headline: 'U.S. GDP Grows {gdp}% in Latest Quarter, Missing {consensusGdp}% Consensus',
+    description: 'The Bureau of Economic Analysis reported that real GDP grew at an annualized rate of {gdp}% in the latest quarter, falling short of the {consensusGdp}% consensus estimate. Consumer spending showed signs of fatigue while business investment contracted modestly. Economists are divided on whether the miss signals a meaningful growth slowdown or a transitory soft patch.',
+    impact: [-0.01, -0.025],
+    sentiment: 'negative',
+    sectorWide: true,
+    source: 'MarketWatch',
+  },
+
+  // ── Healthcare Specific ────────────────────────────────────────────────────
+  {
+    type: 'fda_approval',
+    headline: '{company} Wins FDA Approval for Lead Drug, Addressable Market ~{patients}M Patients',
+    description: '{fullName} announced that the U.S. Food and Drug Administration has granted approval for its lead drug candidate, clearing the path for a commercial launch next quarter. The treatment targets a condition affecting an estimated {patients} million patients in the U.S. alone. Analysts at {analystFirm} raised their price target to ${target}, calling the approval a pivotal catalyst.',
+    impact: [0.03, 0.09],
+    sentiment: 'positive',
+    sectors: ['Healthcare'],
+    source: 'Reuters',
+  },
+  {
+    type: 'clinical_trial_failure',
+    headline: '{company} Phase 3 Trial Misses Primary Endpoint; Shares Decline Sharply',
+    description: '{fullName} disclosed that its Phase 3 clinical trial for its lead compound failed to meet the primary efficacy endpoint versus placebo. The company said it will review the full dataset with scientific advisors before determining next steps. The drug had been considered the centerpiece of {company}\'s near-term pipeline and a key driver of analyst price targets.',
+    impact: [-0.04, -0.10],
+    sentiment: 'negative',
+    sectors: ['Healthcare'],
+    source: 'Bloomberg',
+  },
+
+  // ── Energy Specific ────────────────────────────────────────────────────────
+  {
+    type: 'energy_contract',
+    headline: '{company} Lands ${dealSize}B Federal Renewable Energy Contract Spanning {numStates} States',
+    description: '{fullName} announced it has been awarded a ${dealSize}B multi-year contract to deliver renewable energy infrastructure to federal facilities across {numStates} states. The agreement is one of the largest in company history and underpins revenue visibility through the next {contractYears} years, significantly expanding the firm\'s project backlog.',
+    impact: [0.02, 0.06],
+    sentiment: 'positive',
+    sectors: ['Energy'],
+    source: 'Reuters',
+  },
+
+  // ── Technology Specific ────────────────────────────────────────────────────
+  {
+    type: 'cybersecurity_breach',
+    headline: '{company} Discloses Security Breach Potentially Affecting {affectedUsers}M Accounts',
+    description: '{fullName} confirmed a cybersecurity incident in which unauthorized third parties gained access to customer data, potentially affecting up to {affectedUsers} million accounts. The company has engaged a leading incident-response firm, notified affected customers, and is cooperating with federal regulators. Analysts warn that regulatory fines and class-action exposure remain difficult to quantify.',
+    impact: [-0.025, -0.065],
+    sentiment: 'negative',
+    sectors: ['Technology', 'Finance'],
+    source: 'CNBC',
+  },
+
+  // ── Industrial Specific ────────────────────────────────────────────────────
+  {
+    type: 'defense_contract',
+    headline: '{company} Awarded ${dealSize}B Pentagon Contract for Next-Gen Defense Systems',
+    description: '{fullName} has been selected by the U.S. Department of Defense to develop and deliver next-generation defense systems under a ${dealSize}B, {contractYears}-year contract. The award significantly expands the company\'s defense program backlog and is expected to provide a stable, long-duration revenue stream. The win is seen as a major competitive victory over rival bidders.',
+    impact: [0.025, 0.065],
+    sentiment: 'positive',
+    sectors: ['Industrial'],
+    source: 'Reuters',
+  },
 ];
 
 export const BADGES = [
