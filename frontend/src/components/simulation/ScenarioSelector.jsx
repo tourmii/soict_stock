@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useMarketStore } from '../../store/marketStore';
+import { API_BASE } from '../../lib/api';
 
 const SCENARIOS = [
   { id: 'normal', name: 'Normal Market', desc: 'Standard market conditions with historical averages.', icon: '📈' },
@@ -24,9 +25,9 @@ export default function ScenarioSelector() {
     if (isConnected) {
       try {
         if (scenarioId === 'normal') {
-          await fetch('/api/scenarios/deactivate', { method: 'POST' });
+          await fetch(`${API_BASE}/scenarios/deactivate`, { method: 'POST' });
         } else {
-          await fetch(`/api/scenarios/${scenarioId}/activate`, { method: 'POST' });
+          await fetch(`${API_BASE}/scenarios/${scenarioId}/activate`, { method: 'POST' });
         }
       } catch (err) {
         console.error('Failed to sync scenario with backend', err);

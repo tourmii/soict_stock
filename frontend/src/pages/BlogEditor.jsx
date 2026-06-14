@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
+import TickerAutocomplete from '../components/shared/TickerAutocomplete';
 import './Blogs.css';
 
 const emptyForm = {
@@ -210,11 +211,16 @@ export default function BlogEditor() {
 
               <label>
                 <span>Content</span>
-                <textarea
-                  className="input blog-editor__content"
+                <TickerAutocomplete
                   value={form.content}
                   onChange={(e) => updateField('content', e.target.value)}
-                  required
+                  textareaProps={{
+                    className: 'input blog-editor__content',
+                    placeholder: 'Write your post content here. Use $TICKER to tag stocks (e.g. $SCT, $TECH)...',
+                    rows: 16,
+                    style: { width: '100%', fontFamily: 'inherit', resize: 'vertical' },
+                    required: true,
+                  }}
                 />
               </label>
 

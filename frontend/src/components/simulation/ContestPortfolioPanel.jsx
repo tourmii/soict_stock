@@ -60,33 +60,74 @@ export default function ContestPortfolioPanel() {
         <div style={{marginTop:'12px',fontSize:'var(--text-xs)',color:'var(--gray-500)'}}>
           Cash: <strong style={{color:'var(--text-primary)'}}>{formatCurrency(cash)}</strong>
         </div>
+        {holdings.filter(h=>h.shares>0).length > 0 && (() => {
+          const totalUnrealized = holdings.filter(h=>h.shares>0).reduce((sum, h) => {
+            const cur = prices[h.ticker] || h.avgPrice || 0;
+            return sum + (cur - h.avgPrice) * h.shares;
+          }, 0);
+          return (
+            <div style={{marginTop:'4px',fontSize:'var(--text-xs)',color:'var(--gray-500)'}}>
+              Unrealized P&L: <strong style={{color: totalUnrealized >= 0 ? 'var(--green)' : 'var(--red)'}}>
+                {totalUnrealized >= 0 ? '+' : ''}{formatCurrency(totalUnrealized)}
+              </strong>
+            </div>
+          );
+        })()}
       </div>
 
       <div style={{flex:1,overflowY:'auto',padding:'16px 20px',display:'flex',flexDirection:'column',gap:'20px'}}>
-        {/* Stock holdings */}
+        {/* Positions */}
         <div>
-          <div style={sectionHeader}>Stock Holdings</div>
+          <div style={sectionHeader}>Positions ({holdings.filter(h=>h.shares>0).length})</div>
           {holdings.filter(h=>h.shares>0).length === 0 ? (
-            <p style={{fontSize:'var(--text-xs)',color:'var(--gray-400)',textAlign:'center',padding:'12px 0'}}>No positions.</p>
-          ) : holdings.filter(h=>h.shares>0).map(h => {
-            const cur = prices[h.ticker] || h.avgPrice || 0;
-            const pl  = (cur - h.avgPrice) * h.shares;
-            const plPct = h.avgPrice > 0 ? ((cur - h.avgPrice) / h.avgPrice) * 100 : 0;
-            return (
-              <div key={h.ticker} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',background:'var(--gray-50)',borderRadius:'var(--radius-md)',marginBottom:'8px'}}>
-                <div>
-                  <div style={{fontWeight:700,fontSize:'var(--text-sm)'}}>{h.ticker}</div>
-                  <div style={{fontSize:'11px',color:'var(--gray-500)'}}>{h.shares} sh @ {formatCurrency(h.avgPrice)}</div>
-                </div>
-                <div style={{textAlign:'right'}}>
-                  <div style={{fontWeight:700,fontSize:'var(--text-sm)'}}>{formatCurrency(h.shares*cur)}</div>
-                  <div style={{fontSize:'11px',fontWeight:600,color:pl>=0?'var(--green)':'var(--red)'}}>
-                    {pl>=0?'+':''}{formatCurrency(pl)} ({formatPercent(plPct)})
+            <p style={{fontSize:'var(--text-xs)',color:'var(--gray-400)',textAlign:'center',padding:'16px 0'}}>No open positions. Start trading!</p>
+          ) : (
+            <div style={{display:'flex',flexDirection:'column',gap:'6px'}}>
+              {holdings.filter(h=>h.shares>0).map(h => {
+                const cur = prices[h.ticker] || h.avgPrice || 0;
+                const unrealizedPL = (cur - h.avgPrice) * h.shares;
+                const unrealizedPct = h.avgPrice > 0 ? ((cur - h.avgPrice) / h.avgPrice) * 100 : 0;
+                const mktValue = h.shares * cur;
+                const isProfit = unrealizedPL >= 0;
+                return (
+                  <div key={h.ticker} style={{
+                    background: isProfit ? 'rgba(34,197,94,0.06)' : 'rgba(239,68,68,0.06)',
+                    border: `1px solid ${isProfit ? 'rgba(34,197,94,0.2)' : 'rgba(239,68,68,0.2)'}`,
+                    borderRadius:'var(--radius-md)',
+                    padding:'10px 12px'
+                  }}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'6px'}}>
+                      <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
+                        <span style={{fontWeight:800,fontSize:'var(--text-sm)',color:'var(--text-primary)'}}>{h.ticker}</span>
+                        <span style={{fontSize:'11px',color:'var(--gray-400)'}}>{h.shares} sh</span>
+                      </div>
+                      <span style={{fontWeight:800,fontSize:'var(--text-sm)',color: isProfit ? 'var(--green)' : 'var(--red)'}}>
+                        {isProfit ? '+' : ''}{formatCurrency(unrealizedPL)}
+                      </span>
+                    </div>
+                    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:'4px',fontSize:'10px'}}>
+                      <div>
+                        <div style={{color:'var(--gray-400)',fontWeight:600,marginBottom:'1px'}}>ENTRY</div>
+                        <div style={{fontWeight:600}}>{formatCurrency(h.avgPrice)}</div>
+                      </div>
+                      <div>
+                        <div style={{color:'var(--gray-400)',fontWeight:600,marginBottom:'1px'}}>MARK</div>
+                        <div style={{fontWeight:700,color: isProfit ? 'var(--green)' : 'var(--red)'}}>{formatCurrency(cur)}</div>
+                      </div>
+                      <div style={{textAlign:'right'}}>
+                        <div style={{color:'var(--gray-400)',fontWeight:600,marginBottom:'1px'}}>P&L %</div>
+                        <div style={{fontWeight:700,color: isProfit ? 'var(--green)' : 'var(--red)'}}>{isProfit ? '+' : ''}{unrealizedPct.toFixed(2)}%</div>
+                      </div>
+                    </div>
+                    <div style={{marginTop:'6px',paddingTop:'6px',borderTop:`1px solid ${isProfit ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)'}`,display:'flex',justifyContent:'space-between',fontSize:'10px',color:'var(--gray-400)'}}>
+                      <span>MKT VALUE</span>
+                      <span style={{fontWeight:700,color:'var(--text-primary)'}}>{formatCurrency(mktValue)}</span>
+                    </div>
                   </div>
-                </div>
-              </div>
-            );
-          })}
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Leveraged positions */}

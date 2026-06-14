@@ -18,8 +18,8 @@ export const CONTEST_SCENARIOS = {
   },
   crisis_2008: {
     id: 'crisis_2008',
-    name: '2008 Financial Crisis',
-    description: 'Banks collapse, credit freezes. Survive the meltdown and find opportunities.',
+    name: 'Financial Crisis',
+    description: 'Banks collapse, credit freezes. Survive the meltdown and find the rare opportunities.',
     badgeColor: '#EF4444',
     driftBoost: -0.003,
     volMult: 2.5,
@@ -48,60 +48,91 @@ export const CONTEST_SCENARIOS = {
     driftBoost: -0.002,
     volMult: 1.4,
   },
+  risky_growth: {
+    id: 'risky_growth',
+    name: 'High-Risk Ventures',
+    description: 'Speculative moonshots with extreme volatility. Huge gains or total wipeout — timing is everything.',
+    badgeColor: '#F97316',
+    driftBoost: 0.0035,
+    volMult: 2.2,
+  },
+  ta_patterns: {
+    id: 'ta_patterns',
+    name: 'Technical Analysis',
+    description: 'Trending market with clear chart patterns. Test your chart reading, support/resistance, and timing skills.',
+    badgeColor: '#06B6D4',
+    driftBoost: 0.0008,
+    volMult: 0.95,
+  },
 };
 
+// Each entry defines a contest with its scenario and fixed themed alpha stocks.
+// Suffix letter determines ticker prefix: 'A' → C_AA, C_AB, …
 const DEFAULT_CONTEST_CONFIGS = [
-  { name: 'Bull Market Challenge', suffix: 'A', scenarioId: 'bull_run' },
-  { name: 'Crisis Survival Mode',  suffix: 'B', scenarioId: 'crisis_2008' },
-  { name: 'Tech Bubble Sprint',    suffix: 'C', scenarioId: 'tech_bubble' },
+  {
+    name: 'Financial Crisis',
+    suffix: 'A',
+    scenarioId: 'crisis_2008',
+    stocks: [
+      { name: 'FirsTrust Bank',    sector: 'Finance',    basePrice: 28,  drift: 0.0003, volatility: 0.032 },
+      { name: 'Atlantic Mortgage', sector: 'Finance',    basePrice: 15,  drift: 0.0001, volatility: 0.038 },
+      { name: 'Credit Corp',       sector: 'Finance',    basePrice: 44,  drift: 0.0002, volatility: 0.030 },
+      { name: 'Bail Capital',      sector: 'Industrial', basePrice: 57,  drift: 0.0002, volatility: 0.035 },
+    ],
+    rewards: [
+      { rank: '1',     type: 'Grand Prize Bundle', name: 'SOICT Stock Champion Pack (T-Shirt + Bottle + Cap)', image: '/soict_stock_tshirt.png', description: 'The complete official merchandise gear set for the absolute champion.' },
+      { rank: '2 - 5', type: 'Elite Prize Bundle',  name: 'SOICT Stock Runner-Up Pack (T-Shirt + Cap)',        image: '/soict_stock_cap.png',    description: 'Exclusive T-Shirt and Cap for the elite runner-up traders.' },
+    ],
+  },
+  {
+    name: 'High-Risk Ventures',
+    suffix: 'B',
+    scenarioId: 'risky_growth',
+    stocks: [
+      { name: 'MoonTech Inc',     sector: 'Technology', basePrice: 12,  drift: 0.0005, volatility: 0.042 },
+      { name: 'Quantum Leap',     sector: 'Technology', basePrice: 88,  drift: 0.0004, volatility: 0.038 },
+      { name: 'BioFrontier Labs', sector: 'Healthcare', basePrice: 35,  drift: 0.0003, volatility: 0.045 },
+      { name: 'Viral Growth Co',  sector: 'Consumer',   basePrice: 8,   drift: 0.0006, volatility: 0.040 },
+    ],
+    rewards: [
+      { rank: '1',     type: 'Grand Prize Bundle', name: 'SOICT Stock Tech Legend Pack (T-Shirt + Bottle + Cap)', image: '/soict_stock_tshirt.png', description: 'Custom printed tech sector champion set.' },
+      { rank: '2 - 5', type: 'Elite Prize Bundle',  name: 'SOICT Stock Tech Legend Pack (T-Shirt + Cap)',         image: '/soict_stock_cap.png',    description: 'Exclusive T-Shirt and Cap for the tech sprint runners-up.' },
+    ],
+  },
+  {
+    name: 'TA Mastermind',
+    suffix: 'C',
+    scenarioId: 'ta_patterns',
+    stocks: [
+      { name: 'TrendLine Capital', sector: 'Finance',    basePrice: 76,  drift: 0.0003, volatility: 0.024 },
+      { name: 'PivotPoint Corp',   sector: 'Industrial', basePrice: 48,  drift: 0.0002, volatility: 0.022 },
+      { name: 'Breakout Systems',  sector: 'Technology', basePrice: 112, drift: 0.0004, volatility: 0.026 },
+      { name: 'Reversal Media',    sector: 'Consumer',   basePrice: 33,  drift: 0.0002, volatility: 0.020 },
+    ],
+    rewards: [
+      { rank: '1',     type: 'Grand Prize Bundle', name: 'SOICT Stock Crypto Bull Pack (T-Shirt + Bottle + Cap)', image: '/soict_stock_tshirt.png', description: 'Premium cotton t-shirt, insulated thermos bottle, and sleek cap.' },
+      { rank: '2 - 5', type: 'Elite Prize Bundle',  name: 'SOICT Stock HODL Pack (T-Shirt + Cap)',                image: '/soict_stock_cap.png',    description: 'Exclusive T-Shirt and Cap for the top TA runners-up.' },
+    ],
+  },
 ];
 
 async function getOrCreateDefaultContests(db, engine) {
   let contests = await db.collection('contests').find({ status: 'active' }).toArray();
   if (contests.length === 0) {
-    const defaultContestsConfig = [
-      { 
-        name: 'Weekly Alpha Contest', 
-        suffix: 'A',
-        rewards: [
-          { rank: '1', type: 'Grand Prize Bundle', name: 'SOICT Stock Champion Pack (T-Shirt + Bottle + Cap)', image: '/soict_stock_tshirt.png', description: 'The complete official merchandise gear set: Premium Cotton Tee, Insulated Thermos Bottle, and Classic Embroidered Cap for the absolute champion.' },
-          { rank: '2 - 5', type: 'Elite Prize Bundle', name: 'SOICT Stock Runner-Up Pack (T-Shirt + Cap)', image: '/soict_stock_cap.png', description: 'Exclusive T-Shirt and Cap combination package for the elite runner-up traders.' }
-        ]
-      },
-      { 
-        name: 'Tech Innovators Sprint', 
-        suffix: 'B',
-        rewards: [
-          { rank: '1', type: 'Grand Prize Bundle', name: 'SOICT Stock Tech Legend Pack (T-Shirt + Bottle + Cap)', image: '/soict_stock_tshirt.png', description: 'Custom printed tech sector champion set: Premium Cotton Tee, Insulated Thermos Bottle, and Classic Embroidered Cap.' },
-          { rank: '2 - 5', type: 'Elite Prize Bundle', name: 'SOICT Stock Tech Legend Pack (T-Shirt + Cap)', image: '/soict_stock_cap.png', description: 'Exclusive T-Shirt and Cap combination package for the tech sprint runner-up traders.' }
-        ]
-      },
-      { 
-        name: 'Weekend Crypto Dash', 
-        suffix: 'C',
-        rewards: [
-          { rank: '1', type: 'Grand Prize Bundle', name: 'SOICT Stock Crypto Bull Pack (T-Shirt + Bottle + Cap)', image: '/soict_stock_tshirt.png', description: 'Premium cotton t-shirt, insulated thermos bottle, and sleek black cap featuring the green bullish chart logo.' },
-          { rank: '2 - 5', type: 'Elite Prize Bundle', name: 'SOICT Stock HODL Pack (T-Shirt + Cap)', image: '/soict_stock_cap.png', description: 'Exclusive T-Shirt and Cap combination package for the top crypto trading runners-up.' }
-        ]
-      }
-    ];
-
-  if (contests.length === 0) {
     for (const config of DEFAULT_CONTEST_CONFIGS) {
       const scenario = CONTEST_SCENARIOS[config.scenarioId];
 
-      const customStocks = Array.from({ length: 5 }).map((_, i) => {
-        const basePrice = 10 + Math.random() * 140;
-        const letter    = config.suffix + String.fromCharCode(65 + i);
+      const customStocks = config.stocks.map((s, i) => {
+        const letter = config.suffix + String.fromCharCode(65 + i);
         return {
           ticker:     `C_${letter}`,
-          name:       `${config.suffix}${String.fromCharCode(65 + i)} Corp`,
-          fullName:   `${config.name} Asset ${letter}`,
-          sector:     'Contest',
-          basePrice,
-          drift:      0.0002 + Math.random() * 0.0004,
-          volatility: 0.018 + Math.random() * 0.020,
-          color:      `hsl(${Math.floor(Math.random() * 360)}, 70%, 55%)`,
+          name:       s.name,
+          fullName:   `${s.name} — ${config.name}`,
+          sector:     s.sector,
+          basePrice:  s.basePrice,
+          drift:      s.drift,
+          volatility: s.volatility,
+          color:      `hsl(${(i * 97 + 37) % 360}, 68%, 52%)`,
         };
       });
 
@@ -109,7 +140,7 @@ async function getOrCreateDefaultContests(db, engine) {
         name:           config.name,
         status:         'active',
         scenario,
-        allowedTickers: [...CONTEST_TICKERS, ...customStocks.map(s => s.ticker)],
+        allowedTickers: customStocks.map(s => s.ticker),
         customStocks,
         rewards: config.rewards,
         createdAt: new Date().toISOString(),
@@ -133,15 +164,17 @@ async function getOrCreateDefaultContests(db, engine) {
           }
           engine.stocks = [...engine.stocks, ...stocksToAdd];
 
-          for (const stock of stocksToAdd) {
-            console.log(`⏳ Generating scenario history for ${stock.ticker} [${scenario.name}]...`);
+          for (let si = 0; si < stocksToAdd.length; si++) {
+            const stock = stocksToAdd[si];
+            const stockScenario = scenario; // all alphas share the contest's scenario
+            console.log(`⏳ Generating history for ${stock.ticker} [${stockScenario.name}]...`);
             const now          = Math.floor(Date.now() / 1000);
-            const historyStart = now - 90 * 86400;
-            // Apply scenario to history generation by adjusting stock params
+            const historyStart = now - 365 * 86400;
+            const historyVolMult = Math.min(stockScenario.volMult, 1.8);
             const scenarioStock = {
               ...stock,
-              drift:      stock.drift      + scenario.driftBoost,
-              volatility: stock.volatility * scenario.volMult,
+              drift:      stock.drift      + stockScenario.driftBoost,
+              volatility: stock.volatility * historyVolMult,
             };
             const ticks = engine._generateHistory(scenarioStock, now, historyStart);
             if (ticks.length > 0) {

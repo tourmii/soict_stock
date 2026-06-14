@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import LessonCard from '../components/learn/LessonCard';
+import LessonModal from '../components/learn/LessonModal';
 import QuizModule from '../components/learn/QuizModule';
 import MarketAnalysisLab from '../components/learn/MarketAnalysisLab';
 import PatternGame from '../components/learn/PatternGame';
@@ -21,7 +22,7 @@ import './Learn.css';
 export default function Learn() {
   const [activeTab, setActiveTab] = useState('overview');
   const [selectedQuiz, setSelectedQuiz] = useState(null);
-  const [expandedLessonId, setExpandedLessonId] = useState(null);
+  const [openLessonId, setOpenLessonId] = useState(null);
   const [searchParams] = useSearchParams();
   const user = useAuthStore((state) => state.user);
   const holdings = usePortfolioStore((state) => state.holdings);
@@ -34,7 +35,6 @@ export default function Learn() {
   const initializeLearning = useLearningStore((state) => state.initializeLearning);
   const markSectionComplete = useLearningStore((state) => state.markSectionComplete);
   const markLessonComplete = useLearningStore((state) => state.markLessonComplete);
-  const markLessonOpened = useLearningStore((state) => state.markLessonOpened);
   const calculateOverallProgress = useLearningStore((state) => state.calculateOverallProgress);
   const calculateAverageQuizScore = useLearningStore((state) => state.calculateAverageQuizScore);
   const getCompletedLessonCount = useLearningStore((state) => state.getCompletedLessonCount);
@@ -84,8 +84,7 @@ export default function Learn() {
     if (lessonId && LESSONS.some((lesson) => lesson.id === lessonId)) {
       setActiveTab('lessons');
       setSelectedQuiz(null);
-      setExpandedLessonId(lessonId);
-      setTimeout(() => document.getElementById(`lesson-${lessonId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+      setOpenLessonId(lessonId);
       return;
     }
     if (quizId) {
@@ -103,10 +102,8 @@ export default function Learn() {
   }, [searchParams]);
 
   const openLesson = (lessonId) => {
-    setExpandedLessonId(lessonId);
+    setOpenLessonId(lessonId);
     setSelectedQuiz(null);
-    setActiveTab('lessons');
-    setTimeout(() => document.getElementById(`lesson-${lessonId}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 0);
   };
 
   const openQuiz = (quizId) => {
@@ -256,11 +253,7 @@ export default function Learn() {
                   lesson={lesson}
                   index={i}
                   progress={getLessonProgress(lesson.id)}
-                  expanded={expandedLessonId === lesson.id}
-                  onToggle={(lessonId) => setExpandedLessonId((current) => current === lessonId ? null : lessonId)}
-                  onSectionComplete={markSectionComplete}
-                  onLessonComplete={markLessonComplete}
-                  onLessonOpened={markLessonOpened}
+                  onOpen={openLesson}
                   onStartQuiz={openQuiz}
                   portfolioContext={portfolioContext}
                 />
@@ -327,6 +320,21 @@ export default function Learn() {
           </div>
         )}
       </div>
+
+      {openLessonId && (() => {
+        const lesson = LESSONS.find(l => l.id === openLessonId);
+        return lesson ? (
+          <LessonModal
+            lesson={lesson}
+            progress={getLessonProgress(lesson.id)}
+            onClose={() => setOpenLessonId(null)}
+            onSectionComplete={markSectionComplete}
+            onLessonComplete={markLessonComplete}
+            onStartQuiz={openQuiz}
+            portfolioContext={portfolioContext}
+          />
+        ) : null;
+      })()}
     </div>
   );
 }

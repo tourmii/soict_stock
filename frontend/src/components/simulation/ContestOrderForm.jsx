@@ -96,9 +96,21 @@ export default function ContestOrderForm() {
               </div>
             </div>
             <div style={{background:'var(--primary-bg)',borderRadius:'var(--radius-md)',padding:'14px',textAlign:'center'}}>
-              <p style={{fontSize:'11px',color:'var(--gray-500)',margin:'0 0 4px'}}>Transaction Value</p>
+              <p style={{fontSize:'11px',color:'var(--gray-500)',margin:'0 0 4px'}}>
+                {side === 'Buy' ? 'Est. Cost' : 'Est. Proceeds'}
+              </p>
               <p style={{fontSize:'var(--text-2xl)',fontWeight:800,color:'var(--primary)',fontFamily:'var(--font-heading)',margin:0}}>{formatCurrency(quantity*currentPrice)}</p>
             </div>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:'11px',color:'var(--gray-500)',padding:'0 2px'}}>
+              <span>Available cash</span>
+              <span style={{fontWeight:600,color: quantity*currentPrice > cash ? 'var(--red)' : 'var(--text-primary)'}}>{formatCurrency(cash)}</span>
+            </div>
+            {side === 'Sell' && maxSellQty > 0 && (
+              <div style={{display:'flex',justifyContent:'space-between',fontSize:'11px',color:'var(--gray-500)',padding:'0 2px'}}>
+                <span>Shares owned</span>
+                <span style={{fontWeight:600}}>{maxSellQty} shares</span>
+              </div>
+            )}
             <button onClick={handleRegularSubmit} className={`btn ${side==='Buy'?'btn-green':'btn-red'} btn-lg`} style={{width:'100%'}}>
               {side} {quantity} {ticker}
             </button>

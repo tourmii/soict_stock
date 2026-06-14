@@ -39,11 +39,22 @@ export default function StockChart() {
 
   const [timeframe, setTimeframe] = useState('1D');
   const [activeInd, setActiveInd] = useState({});
+  const [isFetchingHistory, setIsFetchingHistory] = useState(false);
 
-  // Fetch REST data when switching to a long timeframe
+  // Fetch REST data when switching to a long timeframe; track loading state
   useEffect(() => {
-    if (LONG_TF.has(timeframe)) fetchHistoricalOHLCV(selectedTicker, timeframe);
-  }, [selectedTicker, timeframe]);
+    if (!LONG_TF.has(timeframe)) {
+      setIsFetchingHistory(false);
+      return;
+    }
+    const key = `${selectedTicker}_${timeframe}`;
+    if (!historicalOHLCV[key]) {
+      setIsFetchingHistory(true);
+      fetchHistoricalOHLCV(selectedTicker, timeframe);
+    } else {
+      setIsFetchingHistory(false);
+    }
+  }, [selectedTicker, timeframe, historicalOHLCV]);
 
   const ohlcvBars = useMemo(
     () => getOHLCVWithHistory(selectedTicker, timeframe),
@@ -238,7 +249,21 @@ export default function StockChart() {
           ))}
         </div>
       </div>
-      <div ref={chartContainerRef} style={{ flex: 1, minHeight: 0 }} />
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />
+        {isFetchingHistory && (
+          <div style={{
+            position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.85)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 10, borderRadius: '8px', backdropFilter: 'blur(2px)'
+          }}>
+            <div style={{ textAlign: 'center', color: 'var(--gray-500)' }}>
+              <div style={{ width: '32px', height: '32px', border: '3px solid var(--gray-200)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 8px' }} />
+              <span style={{ fontSize: '13px', fontWeight: 600 }}>Loading {timeframe} history…</span>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

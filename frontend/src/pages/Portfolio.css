@@ -37,3 +37,14 @@
   .portfolio-stats { grid-template-columns: 1fr; }
   .portfolio-sidebar { flex-direction: column; }
 }
+
+.portfolio-holding-row {
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.portfolio-holding-row:hover {
+  background: var(--gray-50);
+}
+.portfolio-holding-row:hover td:first-child {
+  color: var(--primary);
+}

@@ -61,7 +61,7 @@ export default function Leaderboard() {
         {userRank && (
           <div className="card" style={{padding:'16px 24px',marginBottom:'var(--sp-4)',background:'linear-gradient(135deg, #1B3BFC08, #8B5CF608)',border:'1px solid var(--primary)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
             <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
-              <span style={{fontSize:'24px'}}>📊</span>
+              <span style={{fontSize:'24px',fontWeight:700,color:'var(--primary)'}}>#{userRank}</span>
               <div>
                 <p style={{fontWeight:700,fontSize:'var(--text-sm)'}}>Your Rank</p>
                 <p style={{color:'var(--gray-500)',fontSize:'12px'}}>Keep trading to climb higher!</p>

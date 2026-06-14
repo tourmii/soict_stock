@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
+import { useAuthStore } from './authStore';
 
 export const useLeaderboardStore = create((set, get) => ({
   entries: [],
@@ -19,19 +20,24 @@ export const useLeaderboardStore = create((set, get) => ({
     try {
       const { period } = get();
       const data = await api.getLeaderboard(period);
+      const currentUser = useAuthStore.getState().user;
 
       const entries = (data || []).map((row, i) => ({
-        rank: row.rank || i + 1,
-        userId: row.userId,
-        name: row.name || 'Anonymous',
+        rank:      row.rank || i + 1,
+        userId:    row.userId,
+        name:      row.name || 'Anonymous',
         portfolio: row.portfolio || 0,
-        return: row.return || 0,
-        sharpe: row.sharpe || 0,
-        badge: null,
-        trades: row.trades || 0,
+        return:    row.return   || 0,
+        sharpe:    row.sharpe   || 0,
+        badge:     null,
+        trades:    row.trades   || 0,
       }));
 
-      set({ entries, loaded: true });
+      const userEntry = currentUser
+        ? entries.find((e) => e.userId === currentUser.id)
+        : null;
+
+      set({ entries, userRank: userEntry?.rank ?? null, loaded: true });
     } catch (err) {
       console.error('Leaderboard fetch error:', err);
       set({ loaded: true });

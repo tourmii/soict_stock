@@ -27,21 +27,38 @@ export default function ContestStockChart() {
   const allowedTickers = currentContest?.allowedTickers || [];
 
   const [timeframe, setTimeframe] = useState('1D');
-  
-  // Ensure selected ticker is allowed
+  const [isFetchingHistory, setIsFetchingHistory] = useState(false);
+
+  // Ensure selected ticker is allowed; prefetch history for all contest tickers
   useEffect(() => {
     if (allowedTickers.length > 0 && !allowedTickers.includes(selectedTicker)) {
       setSelectedTicker(allowedTickers[0]);
     }
-  }, [allowedTickers, selectedTicker, setSelectedTicker]);
+    // Prefetch history for all contest tickers at current timeframe
+    if (allowedTickers.length > 0) {
+      for (const ticker of allowedTickers) {
+        fetchHistoricalOHLCV(ticker, timeframe);
+      }
+    }
+  }, [allowedTickers, selectedTicker, setSelectedTicker, timeframe]);
 
   const stock = STOCKS.find((s) => s.ticker === selectedTicker) || currentContest?.customStocks?.find(s => s.ticker === selectedTicker);
   const { change, changePercent } = getDailyChange(selectedTicker);
 
-  const LONG_TF = new Set(['4H', '1D', '1W', '1M']);
+  // Always fetch — contest tickers have no rawTicks from WebSocket
   useEffect(() => {
-    if (LONG_TF.has(timeframe)) fetchHistoricalOHLCV(selectedTicker, timeframe);
+    fetchHistoricalOHLCV(selectedTicker, timeframe);
   }, [selectedTicker, timeframe]);
+
+  // Track loading state for historical data
+  useEffect(() => {
+    const key = `${selectedTicker}_${timeframe}`;
+    if (!historicalOHLCV[key]) {
+      setIsFetchingHistory(true);
+    } else {
+      setIsFetchingHistory(false);
+    }
+  }, [selectedTicker, timeframe, historicalOHLCV]);
 
   // Aggregate raw ticks into OHLCV bars for the selected timeframe
   const ohlcvBars = useMemo(() => {
@@ -178,7 +195,21 @@ export default function ContestStockChart() {
           ))}
         </div>
       </div>
-      <div ref={chartContainerRef} style={{flex: 1, minHeight: 0}}/>
+      <div style={{ flex: 1, minHeight: 0, position: 'relative' }}>
+        <div ref={chartContainerRef} style={{ width: '100%', height: '100%' }} />
+        {isFetchingHistory && (
+          <div style={{
+            position: 'absolute', inset: 0, background: 'rgba(255,255,255,0.88)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            zIndex: 10, borderRadius: '0 0 var(--radius-lg) var(--radius-lg)',
+          }}>
+            <div style={{ textAlign: 'center', color: 'var(--gray-500)' }}>
+              <div style={{ width: '28px', height: '28px', border: '3px solid var(--gray-200)', borderTopColor: 'var(--primary)', borderRadius: '50%', animation: 'spin 0.8s linear infinite', margin: '0 auto 8px' }} />
+              <span style={{ fontSize: '12px', fontWeight: 600 }}>Loading chart data…</span>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

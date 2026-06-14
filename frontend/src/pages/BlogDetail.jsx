@@ -3,6 +3,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatDateTime } from '../lib/formatters';
 import { useAuthStore } from '../store/authStore';
+import TickerAutocomplete from '../components/shared/TickerAutocomplete';
 import './Blogs.css';
 
 const DISCLAIMER = 'Posts are for educational/community discussion only and are not financial advice.';
@@ -203,12 +204,16 @@ export default function BlogDetail() {
 
               {user ? (
                 <form className="blog-comment-form" onSubmit={submitComment}>
-                  <textarea
-                    className="input"
+                  <TickerAutocomplete
                     value={comment}
                     onChange={(event) => setComment(event.target.value)}
-                    maxLength={1200}
-                    placeholder="Join the discussion..."
+                    textareaProps={{
+                      className: 'input',
+                      maxLength: 1200,
+                      placeholder: 'Join the discussion... use $TICKER to tag stocks',
+                      rows: 3,
+                      style: { width: '100%', fontFamily: 'inherit', resize: 'vertical' },
+                    }}
                   />
                   <button type="submit" className="btn btn-primary" disabled={submittingComment || !comment.trim()}>
                     Comment
@@ -240,7 +245,7 @@ export default function BlogDetail() {
                         </button>
                       )}
                     </div>
-                    <p>{item.content}</p>
+                    <p>{renderStockMentions(item.content)}</p>
                   </article>
                 ))}
               </div>

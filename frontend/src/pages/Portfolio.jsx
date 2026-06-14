@@ -1,4 +1,5 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMarketStore } from '../store/marketStore';
 import { usePortfolioStore } from '../store/portfolioStore';
 import { STOCKS } from '../lib/constants';
@@ -10,7 +11,10 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, AreaChart,
 import './Portfolio.css';
 
 export default function Portfolio() {
+  const navigate = useNavigate();
   const prices = useMarketStore((s) => s.prices);
+  const rawTicks = useMarketStore((s) => s.rawTicks);
+  const setSelectedTicker = useMarketStore((s) => s.setSelectedTicker);
   // histories not needed here — Portfolio uses portfolioStore
   const cash = usePortfolioStore((s) => s.cash);
   const getPortfolioValue = usePortfolioStore((s) => s.getPortfolioValue);
@@ -21,6 +25,8 @@ export default function Portfolio() {
   const getAllocation = usePortfolioStore((s) => s.getAllocation);
   const transactions = usePortfolioStore((s) => s.transactions);
   const portfolioHistory = usePortfolioStore((s) => s.portfolioHistory);
+
+  const [showAllTx, setShowAllTx] = useState(false);
 
   const portfolioValue = getPortfolioValue(prices);
   const unrealizedPL = getUnrealizedPL(prices);
@@ -72,14 +78,17 @@ export default function Portfolio() {
   return (
     <div className="portfolio-page" id="portfolio-page">
       <div className="container" style={{paddingTop:'var(--sp-8)',paddingBottom:'var(--sp-8)'}}>
-        <h2 style={{marginBottom:'var(--sp-6)'}}>Portfolio Overview</h2>
+        <div style={{marginBottom:'var(--sp-6)'}}>
+          <h2 style={{margin:0}}>Portfolio Overview</h2>
+          <p style={{color:'var(--gray-500)',fontSize:'var(--text-sm)',marginTop:'4px'}}>Track your simulated holdings and performance</p>
+        </div>
 
         {/* Stat Cards */}
         <div className="portfolio-stats">
-          <StatCard title="Total Portfolio Value" value={formatCurrency(portfolioValue)} change={formatPercentRaw(portfolioValue > 0 ? (totalReturn/portfolioValue)*100 : 0)} subtitle={`Total Return ${totalReturn>=0?'+':''}${formatCurrency(totalReturn)}`} icon="💰" accentColor="var(--primary)"/>
-          <StatCard title="Unrealized P&L" value={`${unrealizedPL>=0?'+':''}${formatCurrency(unrealizedPL)}`} change={formatPercentRaw(portfolioValue>0?(unrealizedPL/portfolioValue)*100:0)} icon="📊" accentColor={unrealizedPL>=0?'var(--green)':'var(--red)'}/>
-          <StatCard title="Realized P&L" value={`${realizedPL>=0?'+':''}${formatCurrency(realizedPL)}`} icon="✅" accentColor={realizedPL>=0?'var(--green)':'var(--red)'}/>
-          <StatCard title="Today's P&L" value={`${totalReturn>=0?'+':''}${formatCurrency(totalReturn)}`} sparklineData={sparkData} icon="📈"/>
+          <StatCard title="Total Portfolio Value" value={formatCurrency(portfolioValue)} change={formatPercentRaw(portfolioValue > 0 ? (totalReturn/portfolioValue)*100 : 0)} subtitle={`Total Return ${totalReturn>=0?'+':''}${formatCurrency(totalReturn)}`} accentColor="var(--primary)"/>
+          <StatCard title="Unrealized P&L" value={`${unrealizedPL>=0?'+':''}${formatCurrency(unrealizedPL)}`} change={formatPercentRaw(portfolioValue>0?(unrealizedPL/portfolioValue)*100:0)} accentColor={unrealizedPL>=0?'var(--green)':'var(--red)'}/>
+          <StatCard title="Realized P&L" value={`${realizedPL>=0?'+':''}${formatCurrency(realizedPL)}`} accentColor={realizedPL>=0?'var(--green)':'var(--red)'}/>
+          <StatCard title="Total Return" value={`${totalReturn>=0?'+':''}${formatCurrency(totalReturn)}`} sparklineData={sparkData}/>
         </div>
 
         <div className="portfolio-main">
@@ -93,15 +102,20 @@ export default function Portfolio() {
               </div>
               <div className="table-container">
                 <table className="table">
-                  <thead><tr><th>Company</th><th>Ticker</th><th>Shares</th><th>Avg Price</th><th>Current</th><th>Market Value</th><th>Unrealized P&L</th><th>Allocation</th></tr></thead>
+                  <thead><tr><th>Company</th><th>Ticker</th><th>Shares</th><th>Avg Price</th><th>Current</th><th>Market Value</th><th>Unrealized P&L</th><th>Allocation</th><th>Trend</th></tr></thead>
                   <tbody>
                     {holdingsArr.length === 0 ? (
-                      <tr><td colSpan={8} style={{textAlign:'center',padding:'32px',color:'var(--gray-400)'}}>No holdings yet. Start trading!</td></tr>
+                      <tr><td colSpan={9} style={{textAlign:'center',padding:'32px',color:'var(--gray-400)'}}>No holdings yet. Start trading!</td></tr>
                     ) : holdingsArr.map((h) => {
                       const stock = STOCKS.find((s) => s.ticker === h.ticker);
                       const alloc = totalStockValue > 0 ? (h.marketValue / portfolioValue) * 100 : 0;
+                      const sparkPrices = (rawTicks[h.ticker] || []).slice(-30).map((t) => t.price);
                       return (
-                        <tr key={h.ticker}>
+                        <tr
+                          key={h.ticker}
+                          className="portfolio-holding-row"
+                          onClick={() => { setSelectedTicker(h.ticker); navigate('/simulation'); }}
+                        >
                           <td><div style={{display:'flex',alignItems:'center',gap:'8px'}}><div style={{width:28,height:28,borderRadius:'var(--radius-md)',background:`${stock?.color}15`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:'14px',fontWeight:700,color:stock?.color}}>{h.ticker[0]}</div><span style={{fontWeight:500}}>{stock?.name}</span></div></td>
                           <td><span className="badge" style={{background:`${stock?.color}15`,color:stock?.color,fontSize:'11px'}}>{h.ticker}</span></td>
                           <td style={{fontWeight:600}}>{h.shares}</td>
@@ -110,6 +124,7 @@ export default function Portfolio() {
                           <td style={{fontWeight:600}}>{formatCurrency(h.marketValue)}</td>
                           <td><span style={{color:h.unrealizedPL>=0?'var(--green)':'var(--red)',fontWeight:600}}>{h.unrealizedPL>=0?'+':''}{formatCurrency(h.unrealizedPL)} <span style={{fontSize:'11px'}}>({formatPercentRaw(h.unrealizedPLPercent)})</span></span></td>
                           <td>{alloc.toFixed(1)}%</td>
+                          <td><SparklineChart data={sparkPrices} width={60} height={28} color={h.unrealizedPL >= 0 ? '#22C55E' : '#EF4444'} /></td>
                         </tr>
                       );
                     })}
@@ -122,7 +137,7 @@ export default function Portfolio() {
             <div className="card" style={{padding:0}}>
               <div style={{padding:'16px 20px',borderBottom:'var(--border-light)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
                 <h4 style={{fontSize:'var(--text-md)',fontWeight:700}}>Transaction History</h4>
-                {transactions.length > 0 && <button onClick={downloadCSV} className="btn btn-outline btn-sm">📥 Download CSV</button>}
+                {transactions.length > 0 && <button onClick={downloadCSV} className="btn btn-outline btn-sm">Export CSV</button>}
               </div>
               <div className="table-container">
                 <table className="table">
@@ -130,7 +145,7 @@ export default function Portfolio() {
                   <tbody>
                     {transactions.length === 0 ? (
                       <tr><td colSpan={8} style={{textAlign:'center',padding:'32px',color:'var(--gray-400)'}}>No transactions yet</td></tr>
-                    ) : transactions.slice(0, 10).map((tx) => {
+                    ) : transactions.slice(0, showAllTx ? transactions.length : 20).map((tx) => {
                       const stock = STOCKS.find((s) => s.ticker === tx.ticker);
                       return (
                         <tr key={tx.id}>
@@ -147,6 +162,13 @@ export default function Portfolio() {
                     })}
                   </tbody>
                 </table>
+                {!showAllTx && transactions.length > 20 && (
+                  <div style={{textAlign:'center',padding:'12px',borderTop:'1px solid var(--gray-100)'}}>
+                    <button onClick={() => setShowAllTx(true)} className="btn btn-outline btn-sm">
+                      Show all {transactions.length} transactions
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           </div>

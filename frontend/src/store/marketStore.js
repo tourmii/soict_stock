@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { STOCKS } from '../lib/constants';
+import { API_BASE } from '../lib/api';
 
 /* ── Merton Jump-Diffusion (client-side fallback) ───────────────── */
 function randn() {
@@ -70,10 +71,19 @@ export function aggregateToOHLCV(ticks, intervalSeconds) {
     if (bucket !== currentBucket) {
       if (candle) candles.push(candle);
       currentBucket = bucket;
-      candle = { time: bucket, open: tick.price, high: tick.price, low: tick.price, close: tick.price, volume: tick.volume };
+      // Use bar-level open/high/low when provided (backend OHLCV tracking);
+      // fall back to price for legacy bars that only have a close price.
+      candle = {
+        time:   bucket,
+        open:   tick.open  ?? tick.price,
+        high:   tick.high  ?? tick.price,
+        low:    tick.low   ?? tick.price,
+        close:  tick.price,
+        volume: tick.volume,
+      };
     } else {
-      candle.high   = Math.max(candle.high,  tick.price);
-      candle.low    = Math.min(candle.low,   tick.price);
+      candle.high   = Math.max(candle.high, tick.high  ?? tick.price);
+      candle.low    = Math.min(candle.low,  tick.low   ?? tick.price);
       candle.close  = tick.price;
       candle.volume += tick.volume;
     }
@@ -111,8 +121,9 @@ export const useMarketStore = create((set, get) => ({
   isConnected:   false,
 
   // Loading state while engine.initialize() runs on the server
-  isLoading:     false,
-  initProgress:  null,   // { stock, current, total, phase }
+  isLoading:       true,
+  loadingTimeoutId: null,
+  initProgress:    null,   // { stock, current, total, phase }
 
   // Cache for server-aggregated OHLCV (keyed by `${ticker}_${timeframe}`)
   historicalOHLCV: {},
@@ -134,6 +145,16 @@ export const useMarketStore = create((set, get) => ({
   setLoading:      (v)   => set({ isLoading: v }),
   setInitProgress: (p)   => set({ initProgress: p }),
   setSelectedTicker: (t) => set({ selectedTicker: t }),
+
+  // Clears the loading overlay after 10s if the server never sends 'init' or 'loading'
+  startFallbackTimer: () => {
+    const { loadingTimeoutId } = get();
+    if (loadingTimeoutId) clearTimeout(loadingTimeoutId);
+    const id = setTimeout(() => {
+      set({ isLoading: false, loadingTimeoutId: null });
+    }, 10000);
+    set({ loadingTimeoutId: id });
+  },
 
   // Tick-to-tick change (used only for flash direction)
   getChange: (ticker) => {
@@ -251,7 +272,7 @@ export const useMarketStore = create((set, get) => ({
     if (fetchedSet[key]) return; // already fetched
 
     try {
-      const res = await fetch(`/api/market/ohlcv/${ticker}?timeframe=${timeframe}&limit=500`);
+      const res = await fetch(`${API_BASE}/market/ohlcv/${ticker}?timeframe=${timeframe}&limit=500`);
       if (!res.ok) return;
       const candles = await res.json();
       set((s) => ({

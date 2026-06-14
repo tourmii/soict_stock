@@ -26,7 +26,7 @@ export default function Landing() {
   const waveData2 = useMemo(() => generateWaveData(), []);
 
   const watchlist = useMemo(() =>
-    ['SCT', 'INNO', 'NXTG', 'HEAL', 'GRN'].map((t) => {
+    ['SCT', 'INNO', 'BPHR', 'HEAL', 'GRN'].map((t) => {
       const s = STOCKS.find((x) => x.ticker === t);
       const { change, changePercent } = getChange(t);
       const spark = (histories[t] || []).slice(-20).map((h) => h.close);
@@ -35,38 +35,38 @@ export default function Landing() {
   );
 
   const features = [
-    { icon: '📊', title: 'Virtual Trading', desc: 'Execute trades with virtual money in a realistic market environment.' },
-    { icon: '⚙️', title: 'Realistic Pricing Engine', desc: 'Powered by Geometric Brownian Motion with configurable drift and volatility.' },
-    { icon: '📰', title: 'Market News Impact', desc: 'See how breaking news and earnings reports affect stock prices in real-time.' },
-    { icon: '💼', title: 'Portfolio Tracking', desc: 'Monitor holdings, P&L, allocation, and performance with professional analytics.' },
-    { icon: '🎓', title: 'Financial Learning', desc: 'Learn trading concepts through interactive lessons and post-trade explanations.' },
-    { icon: '🛡️', title: 'Risk-Free Practice', desc: 'Build confidence and test strategies in a zero-risk environment.' },
+    { title: 'Virtual Trading', desc: 'Execute trades with virtual money in a realistic market environment.' },
+    { title: 'Realistic Pricing Engine', desc: 'Powered by Geometric Brownian Motion with configurable drift and volatility.' },
+    { title: 'Market News Impact', desc: 'See how breaking news and earnings reports affect stock prices in real-time.' },
+    { title: 'Portfolio Tracking', desc: 'Monitor holdings, P&L, allocation, and performance with professional analytics.' },
+    { title: 'Financial Learning', desc: 'Learn trading concepts through interactive lessons and post-trade explanations.' },
+    { title: 'Risk-Free Practice', desc: 'Build confidence and test strategies in a zero-risk environment.' },
   ];
 
   const pillars = [
-    { num: '01', title: 'Market Fundamentals', desc: 'Understand how markets work, price discovery, and supply & demand.', icon: '📈' },
-    { num: '02', title: 'Technical Analysis', desc: 'Learn chart patterns, indicators (RSI, MACD, SMA), and candlesticks.', icon: '🔍' },
-    { num: '03', title: 'Risk Management', desc: 'Master position sizing, stop-losses, and portfolio diversification.', icon: '🛡️' },
-    { num: '04', title: 'Trading Psychology', desc: 'Develop emotional discipline and build a winning trading mindset.', icon: '🧠' },
+    { num: '01', title: 'Market Fundamentals', desc: 'Understand how markets work, price discovery, and supply & demand.' },
+    { num: '02', title: 'Technical Analysis', desc: 'Learn chart patterns, indicators (RSI, MACD, SMA), and candlesticks.' },
+    { num: '03', title: 'Risk Management', desc: 'Master position sizing, stop-losses, and portfolio diversification.' },
+    { num: '04', title: 'Trading Psychology', desc: 'Develop emotional discipline and build a winning trading mindset.' },
   ];
 
   const advisors = [
-    { name: 'Arjun Mehta', title: 'CFA, Senior Market Analyst', avatar: '👨‍💼', specialty: 'Equity Research & Technical Analysis' },
-    { name: 'Sneha Kapoor', title: 'CFA, Portfolio Strategist', avatar: '👩‍💼', specialty: 'Portfolio Construction & Risk Management' },
-    { name: 'Rohan Desai', title: 'Quantitative Trader', avatar: '👨‍💻', specialty: 'Algorithmic Trading & Derivatives' },
+    { name: 'Arjun Mehta', title: 'CFA, Senior Market Analyst', avatar: 'AM', specialty: 'Equity Research & Technical Analysis' },
+    { name: 'Sneha Kapoor', title: 'CFA, Portfolio Strategist', avatar: 'SK', specialty: 'Portfolio Construction & Risk Management' },
+    { name: 'Rohan Desai', title: 'Quantitative Trader', avatar: 'RD', specialty: 'Algorithmic Trading & Derivatives' },
   ];
 
   const services = [
-    { icon: '📊', title: 'Market Analysis', desc: 'Daily market commentary, sector analysis, and data-driven trade ideas.' },
-    { icon: '🎯', title: 'Strategy Guidance', desc: 'Personalized strategy recommendations based on your risk profile.' },
-    { icon: '🤝', title: 'Advisory Services', desc: 'One-on-one mentoring and portfolio review with experienced pros.' },
+    { title: 'Market Analysis', desc: 'Daily market commentary, sector analysis, and data-driven trade ideas.' },
+    { title: 'Strategy Guidance', desc: 'Personalized strategy recommendations based on your risk profile.' },
+    { title: 'Advisory Services', desc: 'One-on-one mentoring and portfolio review with experienced pros.' },
   ];
 
   const steps = [
-    { step: 1, title: 'Learn the Basics', desc: 'Start with market fundamentals and key concepts', icon: '📚' },
-    { step: 2, title: 'Practice with Simulation', desc: 'Apply knowledge in our risk-free trading environment', icon: '🎮' },
-    { step: 3, title: 'Analyze & Improve', desc: 'Review performance, learn from mistakes, refine strategy', icon: '📈' },
-    { step: 4, title: 'Trade with Confidence', desc: 'Graduate to real markets with proven skills', icon: '🏆' },
+    { step: 1, title: 'Learn the Basics', desc: 'Start with market fundamentals and key concepts' },
+    { step: 2, title: 'Practice with Simulation', desc: 'Apply knowledge in our risk-free trading environment' },
+    { step: 3, title: 'Analyze & Improve', desc: 'Review performance, learn from mistakes, refine strategy' },
+    { step: 4, title: 'Trade with Confidence', desc: 'Graduate to real markets with proven skills' },
   ];
 
   return (
@@ -93,15 +93,14 @@ export default function Landing() {
         </div>
         <div className="container hero__content">
           <div className="hero__text animate-fade-in-up">
-            <div className="hero__badge"><span className="badge badge-primary">🚀 #1 Trading Simulator</span></div>
-            <h1 className="hero__title">Learn Stock Trading Through <span className="hero__title-accent">Realistic Simulation</span></h1>
+            <h1 className="hero__title">Learn Stock Trading Through <span className="hero__title-accent">Real Market Simulation</span></h1>
             <p className="hero__subtitle">Master the art of trading with our risk-free simulation platform. Experience real market dynamics, practice strategies, and build confidence.</p>
             <div className="hero__ctas">
-              <Link to="/simulation" className="btn btn-primary btn-lg" id="hero-cta-primary">▶ Start Simulating</Link>
-              <a href="#features" className="btn btn-outline btn-lg" id="hero-cta-secondary">View Insights</a>
+              <Link to="/simulation" className="btn btn-primary btn-lg" id="hero-cta-primary">Start Simulating</Link>
+              <a href="#features" className="btn btn-outline btn-lg" id="hero-cta-secondary">Explore Features</a>
             </div>
             <div className="hero__badges-row">
-              {['🛡️ Risk-Free Environment', '📊 Real Market Dynamics', '🎓 Learn & Grow'].map((b,i) => (
+              {['Risk-Free Environment', 'Real Market Dynamics', 'Learn & Grow'].map((b,i) => (
                 <div key={i} className={`hero__feature-badge animate-fade-in-up delay-${i+2}`}>{b}</div>
               ))}
             </div>
@@ -152,7 +151,7 @@ export default function Landing() {
         <div className="container">
           <div className="section__header"><span className="badge badge-primary">Features</span><h2 className="section__title">Everything You Need to Master Trading</h2><p className="section__subtitle">Comprehensive tools and simulations to become a confident trader.</p></div>
           <div className="feature-grid">
-            {features.map((f,i)=>(<div key={i} className={`feature-card card animate-fade-in-up delay-${i+1}`}><div className="feature-card__icon">{f.icon}</div><h4 className="feature-card__title">{f.title}</h4><p className="feature-card__desc">{f.desc}</p></div>))}
+            {features.map((f,i)=>(<div key={i} className={`feature-card card animate-fade-in-up delay-${i+1}`}><div className="feature-card__num">{String(i+1).padStart(2,'0')}</div><h4 className="feature-card__title">{f.title}</h4><p className="feature-card__desc">{f.desc}</p></div>))}
           </div>
         </div>
       </section>
@@ -162,7 +161,7 @@ export default function Landing() {
         <div className="container">
           <div className="section__header"><span className="badge badge-primary">Education</span><h2 className="section__title">Learn. Understand. Grow.</h2><p className="section__subtitle">Four-pillar approach to comprehensive financial education.</p></div>
           <div className="pillars-grid">
-            {pillars.map((p,i)=>(<div key={i} className={`pillar-card animate-fade-in-up delay-${i+1}`}><div className="pillar-card__number">{p.num}</div><div className="pillar-card__icon">{p.icon}</div><h4 className="pillar-card__title">{p.title}</h4><p className="pillar-card__desc">{p.desc}</p></div>))}
+            {pillars.map((p,i)=>(<div key={i} className={`pillar-card animate-fade-in-up delay-${i+1}`}><div className="pillar-card__number">{p.num}</div><h4 className="pillar-card__title">{p.title}</h4><p className="pillar-card__desc">{p.desc}</p></div>))}
           </div>
         </div>
       </section>
@@ -173,10 +172,10 @@ export default function Landing() {
           <div className="section__header"><span className="badge badge-primary">Insights & Advisory</span><h2 className="section__title">Expert Guidance at Every Step</h2><p className="section__subtitle">Learn from seasoned professionals and AI-powered analysis.</p></div>
           <div className="advisory-grid">
             <div className="advisors-row">
-              {advisors.map((a,i)=>(<div key={i} className="advisor-card card"><div className="advisor-card__avatar">{a.avatar}</div><h5 className="advisor-card__name">{a.name}</h5><p className="advisor-card__title-text">{a.title}</p><p className="advisor-card__specialty">{a.specialty}</p></div>))}
+              {advisors.map((a,i)=>(<div key={i} className="advisor-card card"><div className="advisor-card__avatar advisor-card__avatar--initials">{a.avatar}</div><h5 className="advisor-card__name">{a.name}</h5><p className="advisor-card__title-text">{a.title}</p><p className="advisor-card__specialty">{a.specialty}</p></div>))}
             </div>
             <div className="services-row">
-              {services.map((s,i)=>(<div key={i} className="service-card card"><div className="service-card__icon">{s.icon}</div><h5 className="service-card__title">{s.title}</h5><p className="service-card__desc">{s.desc}</p></div>))}
+              {services.map((s,i)=>(<div key={i} className="service-card card"><h5 className="service-card__title">{s.title}</h5><p className="service-card__desc">{s.desc}</p></div>))}
             </div>
           </div>
         </div>
@@ -187,7 +186,7 @@ export default function Landing() {
         <div className="container">
           <div className="section__header"><span className="badge badge-primary">Journey</span><h2 className="section__title">Bridging Learning to Professional Expertise</h2><p className="section__subtitle">Follow our proven 4-step path from beginner to confident trader.</p></div>
           <div className="flow-steps">
-            {steps.map((item,i)=>(<div key={i} className="flow-step"><div className="flow-step__circle"><span className="flow-step__icon">{item.icon}</span></div>{i<3&&<div className="flow-step__connector"/>}<h5 className="flow-step__title">{item.title}</h5><p className="flow-step__desc">{item.desc}</p></div>))}
+            {steps.map((item,i)=>(<div key={i} className="flow-step"><div className="flow-step__circle"><span className="flow-step__num">{item.step}</span></div>{i<3&&<div className="flow-step__connector"/>}<h5 className="flow-step__title">{item.title}</h5><p className="flow-step__desc">{item.desc}</p></div>))}
           </div>
           <div style={{textAlign:'center',marginTop:'var(--sp-12)'}}>
             <Link to="/simulation" className="btn btn-primary btn-lg" id="flow-cta">Begin Your Journey →</Link>

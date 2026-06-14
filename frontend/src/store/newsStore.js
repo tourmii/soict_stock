@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { NEWS_TEMPLATES, STOCKS } from '../lib/constants';
+import { API_BASE } from '../lib/api';
 
 /* ── helpers ──────────────────────────────────────────────── */
 
@@ -144,7 +145,7 @@ export const useNewsStore = create((set, get) => ({
   /* Fetch real news from backend API */
   fetchFromBackend: async () => {
     try {
-      const res = await fetch('/api/news?limit=20');
+      const res = await fetch(`${API_BASE}/news?limit=20`);
       if (!res.ok) return;
       const data = await res.json();
       if (data?.length > 0) set({ newsItems: data });

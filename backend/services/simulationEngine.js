@@ -84,6 +84,9 @@ export class SimulationEngine {
     this.momentum   = {}; // extra annual drift from recent price direction
     this.volCluster = {}; // vol multiplier (1 = normal, > 1 after shock)
     this.tickerOverrides = {}; // per-ticker { driftBoost, volMult } for contest scenarios
+
+    // Per-ticker current 5-min bar OHLCV state (for natural candle wicks)
+    this.barState = {}; // { ticker: { barTime, open, high, low, ema } }
   }
 
   /* ─── Startup ─────────────────────────────────────────────── */
@@ -194,11 +197,13 @@ export class SimulationEngine {
     const ticks    = [];
     const jp       = this._jumpParams(stock);
     let price      = startPrice;
-    let activeDrift    = 0;   // current extra drift (annual)
-    let activeBarsLeft = 0;   // bars remaining in the active drift phase
-    const barSigma = stock.volatility * Math.sqrt(DT_BAR); // 1σ per bar
+    let activeDrift    = 0;
+    let activeBarsLeft = 0;
+    const barSigma = stock.volatility * Math.sqrt(DT_BAR);
 
     for (let t = startTime + BAR_SEC; t <= endTime; t += BAR_SEC) {
+      const barOpen = price; // open = previous bar's close
+
       // Random multi-day trend phase (market character cycles)
       if (activeBarsLeft <= 0 && Math.random() < 0.008) {
         activeDrift    = (Math.random() < 0.5 ? 1 : -1) * (0.05 + Math.random() * 0.15);
@@ -219,20 +224,31 @@ export class SimulationEngine {
         dt:     DT_BAR,
       });
 
-      // Detect Merton jump (|return| > 2.5σ) and inject directional follow-through.
-      // This replaces any current trend phase so the market "reacts" to the event.
+      // Detect Merton jump and inject directional follow-through
       const logReturn = Math.log(price / prevPrice);
       if (Math.abs(logReturn) > 2.5 * barSigma) {
         const dir      = logReturn > 0 ? 1 : -1;
-        activeDrift    = dir * (0.10 + Math.random() * 0.15); // 10–25% annual follow-through
-        activeBarsLeft = Math.floor(78 * (1 + Math.random() * 3)); // 1–4 trading days
+        activeDrift    = dir * (0.10 + Math.random() * 0.15);
+        activeBarsLeft = Math.floor(78 * (1 + Math.random() * 3));
       }
 
       price = this._softClamp(price, stock);
+      const barClose = Math.round(price * 100) / 100;
+
+      // Natural wicks: extend body by a random fraction of bar vol
+      const bodyHigh = Math.max(barOpen, barClose);
+      const bodyLow  = Math.min(barOpen, barClose);
+      const wickExt  = stock.volatility * barClose * 0.10;
+      const high = Math.round((bodyHigh + Math.abs(randn()) * wickExt) * 100) / 100;
+      const low  = Math.max(0.50, Math.round((bodyLow  - Math.abs(randn()) * wickExt) * 100) / 100);
+
       ticks.push({
         ticker: stock.ticker,
         time:   t,
-        price:  Math.round(price * 100) / 100,
+        open:   Math.round(barOpen * 100) / 100,
+        high,
+        low,
+        price:  barClose,
         volume: Math.floor(500 + Math.random() * 4000),
       });
     }
@@ -243,10 +259,14 @@ export class SimulationEngine {
 
   _generateHistory(stock, now, historyStart) {
     const startPrice = stock.basePrice * (0.90 + Math.random() * 0.20);
+    const p = Math.round(startPrice * 100) / 100;
     const anchor = [{
       ticker: stock.ticker,
       time:   historyStart,
-      price:  Math.round(startPrice * 100) / 100,
+      open:   p,
+      high:   p,
+      low:    p,
+      price:  p,
       volume: Math.floor(500 + Math.random() * 4000),
     }];
     return anchor.concat(this._generateBars(stock, startPrice, historyStart, now));
@@ -288,7 +308,33 @@ export class SimulationEngine {
     if (!this.initialized) return {};
 
     const now     = Math.floor(Date.now() / 1000);
+    const barTime = Math.floor(now / BAR_SEC) * BAR_SEC;
+    const isNewBar = barTime > this._lastBarTime;
     const updates = {};
+
+    // Save completed bar's OHLCV BEFORE computing new prices (prices[ticker] = last bar's close)
+    if (isNewBar) {
+      this._lastBarTime = barTime;
+      const db = getDb();
+      const barDocs = this.stocks.map((s) => {
+        const bs = this.barState[s.ticker];
+        const closePrice = this.prices[s.ticker];
+        return {
+          ticker: s.ticker,
+          time:   barTime,
+          open:   bs?.open  ?? closePrice,
+          high:   bs ? Math.max(bs.high, closePrice) : closePrice,
+          low:    bs ? Math.min(bs.low,  closePrice) : closePrice,
+          price:  closePrice,
+          volume: Math.floor(500 + Math.random() * 4000),
+        };
+      });
+      try {
+        await db.collection('ticks').insertMany(barDocs, { ordered: false });
+      } catch (err) {
+        if (err.code !== 11000) console.error('Bar insert error:', err.message);
+      }
+    }
 
     for (const stock of this.stocks) {
       const ticker    = stock.ticker;
@@ -327,28 +373,37 @@ export class SimulationEngine {
       }
 
       this.prices[ticker] = newPrice;
+
+      // Update per-bar OHLCV state using EMA-smoothed price for wick tracking.
+      // This prevents every 3-second GBM oscillation from inflating the wick —
+      // the EMA trails the raw price, so only sustained moves extend high/low.
+      const bs = this.barState[ticker];
+      if (isNewBar || !bs || bs.barTime !== barTime) {
+        this.barState[ticker] = {
+          barTime,
+          open: prevPrice, // open = last bar's close
+          high: newPrice,
+          low:  newPrice,
+          ema:  newPrice,
+        };
+      } else {
+        bs.ema  = 0.75 * bs.ema + 0.25 * newPrice; // α=0.25 ≈ 7-period EMA
+        bs.high = Math.max(bs.high, bs.ema);
+        bs.low  = Math.min(bs.low,  bs.ema);
+      }
+      const cbs = this.barState[ticker];
+
       updates[ticker] = {
         price: newPrice,
-        tick:  { time: now, price: newPrice, volume: Math.floor(200 + Math.random() * 2500) },
+        tick: {
+          time:   now,
+          price:  newPrice,
+          volume: Math.floor(200 + Math.random() * 2500),
+          open:   cbs.open,
+          high:   Math.max(cbs.high, newPrice), // ensure high >= close
+          low:    Math.min(cbs.low,  newPrice), // ensure low <= close
+        },
       };
-    }
-
-    // Persist ONE 5-minute bar per bucket
-    const barTime = Math.floor(now / BAR_SEC) * BAR_SEC;
-    if (barTime > this._lastBarTime) {
-      this._lastBarTime = barTime;
-      const db      = getDb();
-      const barDocs = this.stocks.map((s) => ({
-        ticker: s.ticker,
-        time:   barTime,
-        price:  this.prices[s.ticker],
-        volume: Math.floor(500 + Math.random() * 4000),
-      }));
-      try {
-        await db.collection('ticks').insertMany(barDocs, { ordered: false });
-      } catch (err) {
-        if (err.code !== 11000) console.error('Bar insert error:', err.message);
-      }
     }
 
     for (const listener of this.listeners) listener(updates);

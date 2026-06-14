@@ -120,9 +120,10 @@ router.post('/trade', async (req, res) => {
     const totalReturn = ((totalValue - (updatedPortfolio.initialCash || INITIAL_CASH)) / (updatedPortfolio.initialCash || INITIAL_CASH)) * 100;
     const txCount = await db.collection('transactions').countDocuments({ userId });
 
+    const userDoc = await db.collection('users').findOne({ _id: userId }, { projection: { display_name: 1 } });
     await db.collection('leaderboard').updateOne(
       { userId },
-      { $set: { userId, portfolioValue: totalValue, totalReturn, trades: txCount, updatedAt: new Date().toISOString() } },
+      { $set: { userId, displayName: userDoc?.display_name || userId, portfolioValue: totalValue, totalReturn, trades: txCount, updatedAt: new Date().toISOString() } },
       { upsert: true }
     );
 

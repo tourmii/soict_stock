@@ -37,12 +37,13 @@ function App() {
   const loadPortfolio = usePortfolioStore((s) => s.loadFromBackend);
   const fetchLeaderboard = useLeaderboardStore((s) => s.fetchFromBackend);
 
-  const updatePrices   = useMarketStore((s) => s.updatePrices);
-  const initFromServer = useMarketStore((s) => s.initFromServer);
-  const setLoading     = useMarketStore((s) => s.setLoading);
-  const setInitProgress = useMarketStore((s) => s.setInitProgress);
-  const isConnected    = useMarketStore((s) => s.isConnected);
-  const setConnected   = useMarketStore((s) => s.setConnected);
+  const updatePrices        = useMarketStore((s) => s.updatePrices);
+  const initFromServer      = useMarketStore((s) => s.initFromServer);
+  const setLoading          = useMarketStore((s) => s.setLoading);
+  const setInitProgress     = useMarketStore((s) => s.setInitProgress);
+  const isConnected         = useMarketStore((s) => s.isConnected);
+  const setConnected        = useMarketStore((s) => s.setConnected);
+  const startFallbackTimer  = useMarketStore((s) => s.startFallbackTimer);
 
   const initializeAuth = useAuthStore((s) => s.initialize);
   const user = useAuthStore((s) => s.user);
@@ -64,12 +65,13 @@ function App() {
   // WebSocket connection for live market data
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl    = `${protocol}//${window.location.host}/ws`;
+    const wsUrl    = import.meta.env.VITE_WS_URL ?? `${protocol}//${window.location.host}/ws`;
     const ws       = new WebSocket(wsUrl);
 
     ws.onopen = () => {
       console.log('Connected to market data stream');
       setConnected(true);
+      startFallbackTimer(); // ensures loading clears even if init is never received
     };
 
     ws.onmessage = (event) => {
@@ -88,10 +90,15 @@ function App() {
     ws.onclose = () => {
       console.log('Disconnected from market data stream');
       setConnected(false);
+      startFallbackTimer();
+    };
+
+    ws.onerror = () => {
+      startFallbackTimer();
     };
 
     return () => ws.close();
-  }, [setConnected, updatePrices]);
+  }, [setConnected, updatePrices, startFallbackTimer]);
 
   // Price simulation loop (fallback when disconnected)
   useEffect(() => {

@@ -189,7 +189,7 @@ export default function ContestArena() {
                   transition: 'all 0.2s'
                 }}
               >
-                <span>🎁</span> Prizes
+                Prizes
               </button>
             </div>
             <div style={{ overflowY: 'auto', flex: 1, padding: '12px' }}>
