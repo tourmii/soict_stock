@@ -67,8 +67,6 @@ async function main() {
 
   const orderBook = new OrderBookService(engine);
   // Services
-  const engine      = new SimulationEngine();
-  const orderBook   = new OrderBookService(engine);
   const gnewsApiKey = process.env.GNEWS_API_KEY || '';
   const newsInjector = new NewsInjector(engine, gnewsApiKey);
   const riskMetrics  = new RiskMetrics();

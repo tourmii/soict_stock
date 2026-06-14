@@ -58,7 +58,6 @@ export async function connectDB() {
   await db.collection('contest_portfolios').createIndex({ contestId: 1, userId: 1 }, { unique: true });
   await db.collection('contest_portfolios').createIndex({ contestId: 1, portfolioValue: -1 });
 
-  console.log(`✅ Connected to MongoDB: ${DB_NAME}`);
   console.log(`✅ Connected to MongoDB: ${dbName}`);
   return db;
 }
