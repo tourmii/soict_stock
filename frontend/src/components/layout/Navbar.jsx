@@ -19,14 +19,11 @@ export default function Navbar() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [location]);
-
   const navLinks = [
     { path: '/', label: 'Home' },
     { path: '/simulation', label: 'Simulator' },
     { path: '/learn', label: 'Learn' },
+    { path: '/blogs', label: 'Blogs' },
     { path: '/portfolio', label: 'Portfolio' },
     { path: '/leaderboard', label: 'Leaderboard' },
     { path: '/contest', label: 'Contest' },
@@ -50,16 +47,22 @@ export default function Navbar() {
           </Link>
 
           <div className={`navbar__links ${mobileOpen ? 'navbar__links--open' : ''}`}>
-            {navLinks.map((link) => (
-              <Link
-                key={link.path}
-                to={link.path}
-                className={`navbar__link ${location.pathname === link.path ? 'navbar__link--active' : ''}`}
-                id={`nav-${link.label.toLowerCase()}`}
-              >
-                {link.label}
-              </Link>
-            ))}
+            {navLinks.map((link) => {
+              const active = link.path === '/'
+                ? location.pathname === '/'
+                : location.pathname === link.path || location.pathname.startsWith(`${link.path}/`);
+              return (
+                <Link
+                  key={link.path}
+                  to={link.path}
+                  onClick={() => setMobileOpen(false)}
+                  className={`navbar__link ${active ? 'navbar__link--active' : ''}`}
+                  id={`nav-${link.label.toLowerCase()}`}
+                >
+                  {link.label}
+                </Link>
+              );
+            })}
           </div>
 
           <div className="navbar__actions">

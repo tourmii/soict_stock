@@ -7,19 +7,19 @@ router.post('/chat', (req, res) => {
   // Mock AI advisor response
   const responses = {
     trend: {
-      recommendation: 'Based on current market momentum, consider increasing your position in SCT which shows strong upward trend with increasing volume.',
-      rationale: 'SCT has maintained above its 20-day SMA for 8 consecutive sessions with expanding volume. RSI at 62 indicates bullish momentum without overbought conditions.',
-      risk: 'Set a stop-loss at 3% below current price to protect against trend reversal. Position size should not exceed 20% of portfolio.',
+      recommendation: 'In the simulation, SCT can be used as an example to study trend-following behavior. Review chart context, news, and position size before placing any practice trade.',
+      rationale: 'This response is based on simulated momentum indicators and does not predict real market performance.',
+      risk: 'Use this only as educational guidance. No simulated signal guarantees profit, and position size should be reviewed carefully.',
     },
     mean_reversion: {
-      recommendation: 'HEAL appears oversold with RSI below 30. Consider a small position anticipating a bounce back to the mean.',
-      rationale: 'HEAL has declined 8% from its 20-day average, historically it reverts within 3-5 sessions. Volume on the decline is decreasing, suggesting selling pressure is exhausting.',
-      risk: 'Mean reversion strategies have a ~60% win rate. Use a tight stop at 2% to limit downside. Scale in with 2-3 entries.',
+      recommendation: 'In the simulation, HEAL can be used as an example for studying mean-reversion behavior after a sharp move.',
+      rationale: 'A low RSI can help learners discuss oversold conditions, but it is not a real buy signal and does not guarantee a bounce.',
+      risk: 'Mean reversion can continue moving against the learner. Treat this as practice for scenario review and risk planning.',
     },
     value: {
-      recommendation: 'GRN is trading at an attractive valuation relative to its sector peers. Long-term accumulation recommended.',
-      rationale: 'GRN trades at 15x forward earnings vs sector average of 22x. Strong fundamentals with growing revenue and expanding margins.',
-      risk: 'Value traps are a risk. Ensure the company has a catalyst for revaluation. Dollar-cost average over 4-6 weeks.',
+      recommendation: 'In the simulation, GRN can be used as an example for studying value-style reasoning. This is not a real investment recommendation.',
+      rationale: 'The mock valuation comparison is for education only and should be paired with risk factors and scenario assumptions.',
+      risk: 'Value-style ideas can still lose value. Use this as simulation-only learning, not as a real trading plan.',
     },
   };
 

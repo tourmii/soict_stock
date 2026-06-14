@@ -2,8 +2,8 @@ const API_BASE = '/api';
 
 async function request(url, options = {}) {
   const res = await fetch(`${API_BASE}${url}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers },
     ...options,
+    headers: { 'Content-Type': 'application/json', ...options.headers },
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({ message: 'Request failed' }));
@@ -54,10 +54,62 @@ export const api = {
       body: JSON.stringify({ message, mode, context }),
     }),
 
+  /* Chatbot */
+  sendChatbotMessage: (payload) =>
+    request('/chatbot/message', { method: 'POST', body: JSON.stringify(payload) }),
+  getChatbotHistory: (userId) =>
+    request(`/chatbot/history?userId=${encodeURIComponent(userId)}`),
+  saveChatbotHistory: (payload) =>
+    request('/chatbot/history', { method: 'POST', body: JSON.stringify(payload) }),
+  clearChatbotHistory: (userId) =>
+    request(`/chatbot/history?userId=${encodeURIComponent(userId)}`, { method: 'DELETE' }),
+
   /* Scenarios */
   activateScenario: (id) => request(`/scenarios/${id}/activate`, { method: 'POST' }),
   deactivateScenario: () => request('/scenarios/deactivate', { method: 'POST' }),
 
   /* Backtest */
   runBacktest: (strategy) => request('/advisor/backtest', { method: 'POST', body: JSON.stringify(strategy) }),
+
+  /* Blogs */
+  getBlogs: () => request('/blogs'),
+  getBlog: (slug) => request(`/blogs/${encodeURIComponent(slug)}`),
+  getMyBlogs: (userId) => request(`/blogs/me?userId=${encodeURIComponent(userId)}`, {
+    headers: { 'x-user-id': userId },
+  }),
+  createBlogPost: (post, userId) => request('/blogs', {
+    method: 'POST',
+    headers: { 'x-user-id': userId },
+    body: JSON.stringify({ ...post, userId }),
+  }),
+  updateBlogPost: (id, post, userId) => request(`/blogs/${encodeURIComponent(id)}`, {
+    method: 'PUT',
+    headers: { 'x-user-id': userId },
+    body: JSON.stringify({ ...post, userId }),
+  }),
+  publishBlogPost: (id, userId) => request(`/blogs/${encodeURIComponent(id)}/publish`, {
+    method: 'PATCH',
+    headers: { 'x-user-id': userId },
+    body: JSON.stringify({ userId }),
+  }),
+  archiveBlogPost: (id, userId) => request(`/blogs/${encodeURIComponent(id)}/archive`, {
+    method: 'PATCH',
+    headers: { 'x-user-id': userId },
+    body: JSON.stringify({ userId }),
+  }),
+  deleteBlogPost: (id, userId) => request(`/blogs/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: { 'x-user-id': userId },
+    body: JSON.stringify({ userId }),
+  }),
+  /* Learning */
+  getLearningProgress: (userId) => request(`/learning/progress?userId=${encodeURIComponent(userId)}`),
+  updateLearningProgress: (payload) =>
+    request('/learning/progress', { method: 'PUT', body: JSON.stringify(payload) }),
+  markLearningSection: (payload) =>
+    request('/learning/lesson/section', { method: 'POST', body: JSON.stringify(payload) }),
+  saveQuizResult: (payload) =>
+    request('/learning/quiz/result', { method: 'POST', body: JSON.stringify(payload) }),
+  resetLearningProgress: (userId) =>
+    request('/learning/reset', { method: 'POST', body: JSON.stringify({ userId }) }),
 };

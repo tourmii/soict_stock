@@ -3,8 +3,10 @@ import { useMarketStore } from '../../store/marketStore';
 import { usePortfolioStore } from '../../store/portfolioStore';
 import { useOrderStore } from '../../store/orderStore';
 import { useSettingsStore } from '../../store/settingsStore';
-import { STOCKS, ORDER_TYPES } from '../../lib/constants';
+import { STOCKS } from '../../lib/constants';
 import { formatCurrency } from '../../lib/formatters';
+
+const ORDER_TYPES = ['Market', 'Limit', 'Stop-Loss', 'Stop-Limit', 'Take-Profit'];
 
 export default function OrderForm() {
   const selectedTicker = useMarketStore((s) => s.selectedTicker);
@@ -20,107 +22,177 @@ export default function OrderForm() {
   const [orderType, setOrderType] = useState('Market');
   const [quantity, setQuantity] = useState(1);
   const [limitPrice, setLimitPrice] = useState('');
+  const [stopPrice, setStopPrice] = useState('');
 
-  // Always use the selected ticker from chart/watchlist — unified selection
   const ticker = selectedTicker;
   const stock = STOCKS.find((s) => s.ticker === ticker);
-
   const currentPrice = prices[ticker] || 0;
-  const estPrice = orderType === 'Market' ? currentPrice : (parseFloat(limitPrice) || currentPrice);
-  const totalValue = quantity * estPrice;
   const holding = holdings[ticker];
-  const maxSellQty = holding?.shares || 0;
+  const ownedShares = holding?.shares || 0;
 
-  // Reset limit price when ticker changes
+  const needsLimitPrice = orderType === 'Limit' || orderType === 'Take-Profit';
+  const needsStopPrice = orderType === 'Stop-Loss' || orderType === 'Stop-Limit';
+  const needsLimitAfterStop = orderType === 'Stop-Limit';
+
+  const estPrice = orderType === 'Market'
+    ? currentPrice
+    : (parseFloat(needsLimitPrice ? limitPrice : stopPrice) || currentPrice);
+  const totalValue = quantity * estPrice;
+
   useEffect(() => {
     setLimitPrice('');
+    setStopPrice('');
   }, [ticker]);
+
+  const setMaxQty = () => {
+    if (side === 'Buy') {
+      setQuantity(Math.max(1, Math.floor(cash / (currentPrice || 1))));
+    } else {
+      setQuantity(Math.max(1, ownedShares));
+    }
+  };
 
   const handleSubmit = () => {
     if (quantity <= 0) return;
 
     if (orderType === 'Market') {
-      let result;
       if (side === 'Buy') {
-        if (totalValue > cash) { addToast({ type: 'error', title: 'Insufficient funds', message: `Need ${formatCurrency(totalValue)} but only have ${formatCurrency(cash)}` }); return; }
-        result = buy(ticker, quantity, currentPrice, orderType, prices);
+        if (totalValue > cash) {
+          addToast({ type: 'error', title: 'Insufficient funds', message: `Need ${formatCurrency(totalValue)} but have ${formatCurrency(cash)}` });
+          return;
+        }
+        buy(ticker, quantity, currentPrice, orderType, prices);
+        addToast({ type: 'trade', title: 'Buy Executed', message: `${quantity} ${ticker} @ ${formatCurrency(currentPrice)}` });
       } else {
-        if (quantity > maxSellQty) { addToast({ type: 'error', title: 'Insufficient shares', message: `You only own ${maxSellQty} shares of ${ticker}` }); return; }
-        result = sell(ticker, quantity, currentPrice, orderType, prices);
+        if (quantity > ownedShares) {
+          addToast({ type: 'error', title: 'Insufficient shares', message: `You own ${ownedShares} shares of ${ticker}` });
+          return;
+        }
+        sell(ticker, quantity, currentPrice, orderType, prices);
+        addToast({ type: 'trade', title: 'Sell Executed', message: `${quantity} ${ticker} @ ${formatCurrency(currentPrice)}` });
       }
-      if (result) {
-        addToast({
-          type: 'trade', title: `${side} Order Executed`,
-          message: `You ${side.toLowerCase() === 'buy' ? 'bought' : 'sold'} ${quantity} shares of ${stock?.name} at ${formatCurrency(currentPrice)}`,
-          lesson: true,
-        });
-        setQuantity(1);
-      }
+      setQuantity(1);
     } else {
-      addOrder({ type: side, ticker, orderType, quantity, price: estPrice });
-      addToast({ type: 'info', title: `${orderType} Order Placed`, message: `${side} ${quantity} ${ticker} at ${formatCurrency(estPrice)}. Order will execute when price condition is met.` });
+      const triggerPrice = parseFloat(needsLimitPrice ? limitPrice : stopPrice);
+      if (!triggerPrice || triggerPrice <= 0) {
+        addToast({ type: 'error', title: 'Invalid price', message: 'Please enter a valid price.' });
+        return;
+      }
+      addOrder({ type: side, ticker, orderType, quantity, price: triggerPrice });
+      addToast({ type: 'info', title: `${orderType} Order Placed`, message: `${side} ${quantity} ${ticker} @ ${formatCurrency(triggerPrice)}` });
       setQuantity(1);
       setLimitPrice('');
+      setStopPrice('');
     }
   };
 
   return (
-    <div className="card" style={{padding:'20px'}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:'16px'}}>
-        <h4 style={{fontSize:'var(--text-md)',fontWeight:700,margin:0}}>Place Order</h4>
-        <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-          <span style={{width:'10px',height:'10px',borderRadius:'50%',background: stock?.color || 'var(--primary)',display:'inline-block'}}></span>
-          <span style={{fontWeight:700,fontSize:'var(--text-sm)',color: stock?.color || 'var(--primary)'}}>{ticker}</span>
-          <span style={{fontSize:'11px',color:'var(--gray-400)'}}>{stock?.name}</span>
-        </div>
-      </div>
-      <div style={{display:'flex',gap:'4px',marginBottom:'16px',background:'var(--gray-100)',borderRadius:'var(--radius-md)',padding:'3px'}}>
-        <button onClick={()=>setSide('Buy')} style={{flex:1,padding:'8px',borderRadius:'var(--radius-sm)',border:'none',fontWeight:600,fontSize:'var(--text-sm)',cursor:'pointer',background:side==='Buy'?'var(--green)':'transparent',color:side==='Buy'?'white':'var(--gray-600)',transition:'all 0.15s'}}>Buy</button>
-        <button onClick={()=>setSide('Sell')} style={{flex:1,padding:'8px',borderRadius:'var(--radius-sm)',border:'none',fontWeight:600,fontSize:'var(--text-sm)',cursor:'pointer',background:side==='Sell'?'var(--red)':'transparent',color:side==='Sell'?'white':'var(--gray-600)',transition:'all 0.15s'}}>Sell</button>
+    <div className="order-form">
+      <div className="order-form__header">
+        <span className="order-ticker" style={{ color: stock?.color }}>{ticker}</span>
+        <span className="order-price">{formatCurrency(currentPrice)}</span>
       </div>
 
-      <div style={{display:'flex',flexDirection:'column',gap:'12px'}}>
-        <div>
-          <label style={{fontSize:'var(--text-xs)',color:'var(--gray-500)',fontWeight:500,display:'block',marginBottom:'4px'}}>Order Type</label>
-          <select value={orderType} onChange={(e)=>setOrderType(e.target.value)} className="input select">
-            {ORDER_TYPES.map((t)=>(<option key={t} value={t}>{t}</option>))}
-          </select>
-        </div>
-        <div>
-          <label style={{fontSize:'var(--text-xs)',color:'var(--gray-500)',fontWeight:500,display:'block',marginBottom:'4px'}}>Quantity</label>
-          <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-            <button onClick={()=>setQuantity(Math.max(1,quantity-1))} className="btn btn-ghost btn-icon" style={{border:'var(--border-light)'}}>−</button>
-            <input type="number" value={quantity} onChange={(e)=>setQuantity(Math.max(1,parseInt(e.target.value)||1))} className="input" style={{textAlign:'center',width:'80px'}} min="1"/>
-            <button onClick={()=>setQuantity(quantity+1)} className="btn btn-ghost btn-icon" style={{border:'var(--border-light)'}}>+</button>
-          </div>
-        </div>
-        {orderType !== 'Market' && (
-          <div>
-            <label style={{fontSize:'var(--text-xs)',color:'var(--gray-500)',fontWeight:500,display:'block',marginBottom:'4px'}}>{orderType} Price</label>
-            <input type="number" value={limitPrice} onChange={(e)=>setLimitPrice(e.target.value)} className="input" placeholder={currentPrice.toFixed(2)} step="0.01"/>
-          </div>
-        )}
-        {side === 'Sell' && maxSellQty > 0 && (
-          <div style={{background:'var(--gray-50)',borderRadius:'var(--radius-md)',padding:'8px 12px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-            <span style={{fontSize:'var(--text-xs)',color:'var(--gray-500)'}}>Available to sell</span>
-            <span style={{fontWeight:600,fontSize:'var(--text-sm)'}}>{maxSellQty} shares</span>
-          </div>
-        )}
-        <div style={{background:'var(--gray-50)',borderRadius:'var(--radius-md)',padding:'12px',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <span style={{fontSize:'var(--text-xs)',color:'var(--gray-500)'}}>Est. Market Price</span>
-          <span style={{fontWeight:700,fontSize:'var(--text-base)'}}>{formatCurrency(estPrice)}</span>
-        </div>
-        <div style={{background:'var(--primary-bg)',borderRadius:'var(--radius-md)',padding:'16px',textAlign:'center'}}>
-          <p style={{fontSize:'var(--text-xs)',color:'var(--gray-500)',marginBottom:'4px'}}>Estimated Transaction Value</p>
-          <p style={{fontSize:'var(--text-2xl)',fontWeight:800,color:'var(--primary)',fontFamily:'var(--font-heading)'}}>{formatCurrency(totalValue)}</p>
-        </div>
-        <button onClick={handleSubmit} className={`btn ${side==='Buy'?'btn-green':'btn-red'} btn-lg`} style={{width:'100%'}}>
-          Confirm {side} · {ticker}
-        </button>
-        <p style={{fontSize:'11px',color:'var(--gray-400)',textAlign:'center'}}>
-          {orderType === 'Market' ? 'Market orders executed at best available price' : `${orderType} order will execute when price condition is met`}
-        </p>
+      <div className="order-form__sides">
+        <button
+          className={`side-btn buy ${side === 'Buy' ? 'active' : ''}`}
+          onClick={() => setSide('Buy')}
+        >Buy</button>
+        <button
+          className={`side-btn sell ${side === 'Sell' ? 'active' : ''}`}
+          onClick={() => setSide('Sell')}
+        >Sell</button>
       </div>
+
+      <div className="order-form__field">
+        <label>Order Type</label>
+        <select
+          value={orderType}
+          onChange={(e) => setOrderType(e.target.value)}
+          className="order-select"
+        >
+          {ORDER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+      </div>
+
+      <div className="order-form__field">
+        <div className="field-label-row">
+          <label>Quantity</label>
+          <button className="max-btn" onClick={setMaxQty}>Max</button>
+        </div>
+        <div className="qty-input">
+          <button onClick={() => setQuantity((q) => Math.max(1, q - 1))}>−</button>
+          <input
+            type="number"
+            value={quantity}
+            onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+            min="1"
+          />
+          <button onClick={() => setQuantity((q) => q + 1)}>+</button>
+        </div>
+      </div>
+
+      {needsStopPrice && (
+        <div className="order-form__field">
+          <label>Stop Price</label>
+          <input
+            type="number"
+            value={stopPrice}
+            onChange={(e) => setStopPrice(e.target.value)}
+            placeholder={currentPrice.toFixed(2)}
+            step="0.01"
+            className="order-input"
+          />
+        </div>
+      )}
+
+      {(needsLimitPrice || needsLimitAfterStop) && (
+        <div className="order-form__field">
+          <label>{needsLimitAfterStop ? 'Limit Price' : orderType === 'Take-Profit' ? 'Target Price' : 'Limit Price'}</label>
+          <input
+            type="number"
+            value={limitPrice}
+            onChange={(e) => setLimitPrice(e.target.value)}
+            placeholder={currentPrice.toFixed(2)}
+            step="0.01"
+            className="order-input"
+          />
+        </div>
+      )}
+
+      <div className="order-form__summary">
+        <div className="sum-row">
+          <span>Est. Price</span>
+          <span>{formatCurrency(estPrice)}</span>
+        </div>
+        <div className="sum-row">
+          <span>Total Value</span>
+          <strong style={{ color: side === 'Buy' ? 'var(--green)' : 'var(--red)' }}>
+            {formatCurrency(totalValue)}
+          </strong>
+        </div>
+        <div className="sum-row">
+          <span>{side === 'Buy' ? 'Buying Power' : 'Shares Owned'}</span>
+          <span>{side === 'Buy' ? formatCurrency(cash) : `${ownedShares} shares`}</span>
+        </div>
+      </div>
+
+      <button
+        onClick={handleSubmit}
+        className={`order-submit ${side === 'Buy' ? 'buy' : 'sell'}`}
+      >
+        {orderType === 'Market' ? `${side} ${quantity} ${ticker}` : `Place ${orderType}`}
+      </button>
+
+      <p className="order-form__hint">
+        {orderType === 'Market'
+          ? 'Executes immediately at best available price'
+          : orderType === 'Stop-Limit'
+          ? 'Triggers at stop price, executes at limit price'
+          : orderType === 'Take-Profit'
+          ? 'Sells automatically when target price is reached'
+          : `Executes when price reaches your ${orderType.toLowerCase()} level`}
+      </p>
     </div>
   );
 }

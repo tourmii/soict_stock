@@ -1,7 +1,23 @@
-FROM node:20-alpine
+# ── deps: install production dependencies only ────────────────────
+FROM node:20-alpine AS deps
 WORKDIR /app
 COPY package*.json ./
-RUN npm install
+RUN npm ci --omit=dev
+
+# ── runtime ───────────────────────────────────────────────────────
+FROM node:20-alpine AS runtime
+ENV NODE_ENV=production
+
+RUN addgroup -S app && adduser -S app -G app
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+USER app
 EXPOSE 3001
-CMD ["npm", "start"]
+
+HEALTHCHECK --interval=15s --timeout=5s --start-period=30s --retries=3 \
+  CMD wget -qO- http://localhost:3001/api/health || exit 1
+
+CMD ["node", "server.js"]

@@ -1,64 +1,135 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { useMarketStore } from '../../store/marketStore';
 import { STOCKS } from '../../lib/constants';
-import { formatCurrency, formatPercentRaw } from '../../lib/formatters';
-import SparklineChart from '../shared/SparklineChart';
+import { formatCurrency } from '../../lib/formatters';
+
+const SECTORS = ['All', 'Technology', 'Healthcare', 'Energy', 'Finance', 'Consumer', 'Industrial'];
 
 export default function Watchlist() {
-  const [tab, setTab] = useState('watchlist');
-  const prices = useMarketStore((s) => s.prices);
-  const getHistories = useMarketStore((s) => s.getHistories);
-  const watchlist = useMarketStore((s) => s.watchlist);
-  const getChange = useMarketStore((s) => s.getChange);
+  const [tab, setTab]               = useState('watch');
+  const [sectorFilter, setSector]   = useState('All');
+  const [search, setSearch]         = useState('');
+  const [flashMap, setFlashMap]     = useState({});
+  const prevPricesRef               = useRef({});
+
+  const prices           = useMarketStore((s) => s.prices);
+  const getDailyChange   = useMarketStore((s) => s.getDailyChange);
   const setSelectedTicker = useMarketStore((s) => s.setSelectedTicker);
-  const selectedTicker = useMarketStore((s) => s.selectedTicker);
-  const addToWatchlist = useMarketStore((s) => s.addToWatchlist);
+  const selectedTicker   = useMarketStore((s) => s.selectedTicker);
+  const watchlist        = useMarketStore((s) => s.watchlist);
+  const addToWatchlist   = useMarketStore((s) => s.addToWatchlist);
+
+  // Detect price changes and trigger flash
+  useEffect(() => {
+    const newFlash = {};
+    for (const [ticker, price] of Object.entries(prices)) {
+      const prev = prevPricesRef.current[ticker];
+      if (prev !== undefined && prev !== price) {
+        newFlash[ticker] = price > prev ? 'up' : 'down';
+      }
+      prevPricesRef.current[ticker] = price;
+    }
+    if (Object.keys(newFlash).length === 0) return;
+    setFlashMap(newFlash);
+    const t = setTimeout(() => setFlashMap({}), 500);
+    return () => clearTimeout(t);
+  }, [prices]);
 
   const displayStocks = useMemo(() => {
-    const tickers = tab === 'watchlist' ? watchlist : STOCKS.map((s) => s.ticker);
-    const histories = getHistories();
-    return tickers.map((t) => {
-      const stock = STOCKS.find((s) => s.ticker === t);
-      const { change, changePercent } = getChange(t);
-      const spark = (histories[t] || []).slice(-20).map((h) => h.close);
-      return { ...stock, price: prices[t], change, changePercent, sparkline: spark };
-    });
-  }, [tab, watchlist, prices]);
+    let source = tab === 'watch'
+      ? STOCKS.filter((s) => watchlist.includes(s.ticker))
+      : STOCKS;
+    if (sectorFilter !== 'All') source = source.filter((s) => s.sector === sectorFilter);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      source = source.filter((s) =>
+        s.ticker.toLowerCase().includes(q) || s.name.toLowerCase().includes(q)
+      );
+    }
+    return source.map((s) => ({
+      ...s,
+      price: prices[s.ticker] || s.basePrice,
+      ...getDailyChange(s.ticker),
+    }));
+  }, [tab, sectorFilter, search, prices, watchlist]);
 
-  const otherStocks = STOCKS.filter((s) => !watchlist.includes(s.ticker));
+  const notInWatchlist = STOCKS.filter((s) => !watchlist.includes(s.ticker));
 
   return (
-    <div className="card" style={{padding:0,overflow:'hidden'}}>
-      <div style={{display:'flex',borderBottom:'var(--border-light)'}}>
-        <button onClick={()=>setTab('watchlist')} style={{flex:1,padding:'10px',fontSize:'var(--text-sm)',fontWeight:600,color:tab==='watchlist'?'var(--primary)':'var(--gray-500)',borderBottom:tab==='watchlist'?'2px solid var(--primary)':'2px solid transparent',background:'transparent',cursor:'pointer',transition:'all 0.15s'}}>My Watchlist</button>
-        <button onClick={()=>setTab('movers')} style={{flex:1,padding:'10px',fontSize:'var(--text-sm)',fontWeight:600,color:tab==='movers'?'var(--primary)':'var(--gray-500)',borderBottom:tab==='movers'?'2px solid var(--primary)':'2px solid transparent',background:'transparent',cursor:'pointer',transition:'all 0.15s'}}>Top Movers</button>
+    <div className="watchlist">
+      <div className="watchlist__header">
+        <div className="watchlist__tabs">
+          <button className={tab === 'watch' ? 'active' : ''} onClick={() => setTab('watch')}>Watch</button>
+          <button className={tab === 'all' ? 'active' : ''} onClick={() => setTab('all')}>All</button>
+        </div>
+        <input
+          className="watchlist__search"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search…"
+        />
       </div>
-      <div style={{maxHeight:'360px',overflowY:'auto'}}>
-        {displayStocks.map((s) => (
-          <div key={s.ticker} onClick={()=>setSelectedTicker(s.ticker)} style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'10px 14px',cursor:'pointer',background:selectedTicker===s.ticker?'var(--primary-bg)':'transparent',borderLeft:selectedTicker===s.ticker?'3px solid var(--primary)':'3px solid transparent',transition:'all 0.15s',borderBottom:'1px solid var(--gray-50)'}}>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{display:'flex',alignItems:'center',gap:'6px'}}>
-                <span style={{fontWeight:700,fontSize:'var(--text-sm)',color:s.color}}>{s.ticker}</span>
-                <span style={{fontSize:'11px',color:'var(--gray-400)',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.name}</span>
-              </div>
-            </div>
-            <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-              <SparklineChart data={s.sparkline} color={s.changePercent>=0?'#22C55E':'#EF4444'} width={44} height={20}/>
-              <div style={{textAlign:'right',minWidth:'70px'}}>
-                <div style={{fontSize:'var(--text-sm)',fontWeight:600}}>{formatCurrency(s.price)}</div>
-                <div style={{fontSize:'11px',fontWeight:600,color:s.changePercent>=0?'var(--green)':'var(--red)'}}>
-                  {s.changePercent>=0?'+':''}{s.changePercent.toFixed(2)}%
-                </div>
-              </div>
-            </div>
-          </div>
+
+      <div className="watchlist__sectors">
+        {SECTORS.map((s) => (
+          <button
+            key={s}
+            className={`sector-btn ${sectorFilter === s ? 'active' : ''}`}
+            onClick={() => setSector(s)}
+          >
+            {s === 'All' ? 'All' : s.slice(0, 4)}
+          </button>
         ))}
       </div>
-      {tab === 'watchlist' && otherStocks.length > 0 && (
-        <div style={{padding:'8px 14px',borderTop:'var(--border-light)'}}>
-          <select onChange={(e)=>{if(e.target.value)addToWatchlist(e.target.value);e.target.value='';}} className="input select" style={{padding:'6px 10px',fontSize:'var(--text-xs)'}}>
-            <option value="">+ Add to Watchlist</option>
-            {otherStocks.map((s)=>(<option key={s.ticker} value={s.ticker}>{s.ticker} — {s.name}</option>))}
+
+      <div className="watchlist__cols">
+        <span>Symbol</span>
+        <span style={{ textAlign: 'right' }}>Price</span>
+        <span style={{ textAlign: 'right' }}>Day%</span>
+      </div>
+
+      <div className="watchlist__list">
+        {displayStocks.map((s) => {
+          const flash = flashMap[s.ticker];
+          return (
+            <div
+              key={s.ticker}
+              className={`watchlist-row ${selectedTicker === s.ticker ? 'active' : ''} ${flash ? `flash-${flash}` : ''}`}
+              onClick={() => setSelectedTicker(s.ticker)}
+            >
+              <div className="watchlist-row__symbol">
+                <span className="wl-dot" style={{ background: s.color }} />
+                <div className="wl-text">
+                  <span className="wl-ticker">{s.ticker}</span>
+                  <span className="wl-name">{s.name.split(' ')[0]}</span>
+                </div>
+              </div>
+              <span className={`wl-price ${flash === 'up' ? 'flash-text-up' : flash === 'down' ? 'flash-text-down' : ''}`}>
+                {formatCurrency(s.price)}
+              </span>
+              <span className={`wl-change ${s.changePercent >= 0 ? 'up' : 'down'}`}>
+                {s.changePercent >= 0 ? '+' : ''}{s.changePercent.toFixed(2)}%
+              </span>
+            </div>
+          );
+        })}
+        {displayStocks.length === 0 && (
+          <div className="watchlist-empty">
+            {tab === 'watch' ? 'No stocks in watchlist' : 'No results'}
+          </div>
+        )}
+      </div>
+
+      {tab === 'watch' && notInWatchlist.length > 0 && (
+        <div className="watchlist__add">
+          <select
+            onChange={(e) => { if (e.target.value) { addToWatchlist(e.target.value); e.target.value = ''; } }}
+            className="watchlist__add-select"
+          >
+            <option value="">+ Add symbol</option>
+            {notInWatchlist.map((s) => (
+              <option key={s.ticker} value={s.ticker}>{s.ticker} — {s.name}</option>
+            ))}
           </select>
         </div>
       )}
