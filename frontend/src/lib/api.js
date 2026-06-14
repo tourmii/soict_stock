@@ -21,6 +21,9 @@ export const api = {
   getProfile: (userId) => request(`/auth/profile?userId=${userId}`),
   updateProfile: (userId, displayName) =>
     request('/auth/profile', { method: 'PUT', body: JSON.stringify({ userId, displayName }) }),
+  verifyEmail: (token) => request(`/auth/verify-email?token=${encodeURIComponent(token)}`),
+  resendVerification: (email) =>
+    request('/auth/resend-verification', { method: 'POST', body: JSON.stringify({ email }) }),
   /* Market */
   getStocks: () => request('/market/stocks'),
   getHistory: (ticker, timeframe) => request(`/market/history/${ticker}?timeframe=${timeframe}`),
@@ -28,7 +31,7 @@ export const api = {
 
   /* Orders */
   placeOrder: (order) => request('/orders', { method: 'POST', body: JSON.stringify(order) }),
-  getOrders: () => request('/orders'),
+  getOrders: (userId = null) => request(`/orders${userId ? `?userId=${encodeURIComponent(userId)}` : ''}`),
   cancelOrder: (id) => request(`/orders/${id}`, { method: 'DELETE' }),
 
   /* Portfolio */

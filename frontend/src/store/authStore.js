@@ -17,13 +17,16 @@ export const useAuthStore = create((set, get) => ({
     try {
       const storedUserId = localStorage.getItem('soict_userId');
       if (storedUserId) {
-        // Validate session by fetching profile from backend
         try {
           const data = await api.getProfile(storedUserId);
-          const user = data.user;
+          const user = data?.user;
+          if (!user?.id) {
+            localStorage.removeItem('soict_userId');
+            set({ loading: false });
+            return;
+          }
           set({ user, profile: user, session: { userId: user.id }, loading: false });
         } catch {
-          // Stored session is invalid — clear it
           localStorage.removeItem('soict_userId');
           set({ loading: false });
         }
@@ -48,15 +51,13 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  /* Sign up — create account via backend */
+  /* Sign up — create account via backend (requires email verification before sign in) */
   signUp: async (email, password, displayName) => {
     set({ loading: true, error: null });
     try {
       const data = await api.signUp(email, password, displayName);
-      const user = data.user;
-      localStorage.setItem('soict_userId', user.id);
-      set({ user, profile: user, session: { userId: user.id }, loading: false });
-      return { data: { user } };
+      set({ loading: false });
+      return { data: { message: data.message } };
     } catch (err) {
       const msg = err.message || 'Sign up failed';
       set({ error: msg, loading: false });
@@ -69,7 +70,8 @@ export const useAuthStore = create((set, get) => ({
     set({ loading: true, error: null });
     try {
       const data = await api.signIn(email, password);
-      const user = data.user;
+      const user = data?.user;
+      if (!user?.id) throw new Error('Unexpected response from server');
       localStorage.setItem('soict_userId', user.id);
       set({ user, profile: user, session: { userId: user.id }, loading: false });
       return { data: { user } };

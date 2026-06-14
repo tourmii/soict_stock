@@ -14,6 +14,7 @@ import BlogEditor from './pages/BlogEditor';
 import UserProfile from './pages/UserProfile';
 
 import Learn from './pages/Learn';
+import VerifyEmail from './pages/VerifyEmail';
 import Toast from './components/shared/Toast';
 import ChatbotWidget from './components/chatbot/ChatbotWidget';
 import { useMarketStore } from './store/marketStore';
@@ -169,6 +170,7 @@ function App() {
           <Route path="/my-blogs/new" element={<BlogEditor />} />
           <Route path="/my-blogs/:id/edit" element={<BlogEditor />} />
           <Route path="/learn" element={<Learn />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
           <Route path="/index.html" element={<Navigate to="/" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

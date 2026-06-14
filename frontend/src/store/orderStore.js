@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
+import { useAuthStore } from './authStore';
 
 export const useOrderStore = create((set, get) => ({
   openOrders: [],  // { id, type, ticker, orderType, quantity, price, status, createdAt }
@@ -17,7 +18,8 @@ export const useOrderStore = create((set, get) => ({
     }));
 
     // Sync to backend
-    api.placeOrder(newOrder).catch((err) => console.error('Order sync error:', err));
+    const userId = useAuthStore.getState().user?.id || 'default';
+    api.placeOrder({ ...newOrder, userId }).catch((err) => console.error('Order sync error:', err));
 
     return newOrder;
   },
@@ -71,7 +73,8 @@ export const useOrderStore = create((set, get) => ({
 
   loadFromBackend: async () => {
     try {
-      const data = await api.getOrders();
+      const userId = useAuthStore.getState().user?.id || null;
+      const data = await api.getOrders(userId);
       if (data?.open) {
         set({
           openOrders: data.open.map((row) => ({

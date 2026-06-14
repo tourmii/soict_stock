@@ -47,6 +47,7 @@ export async function connectDB() {
   await db.collection('news').createIndex({ timestamp: -1 });
   await db.collection('users').createIndex({ email: 1 }, { unique: true });
   await db.collection('users').createIndex({ display_name: 1 });
+  await db.collection('users').createIndex({ verificationToken: 1 }, { sparse: true });
   await db.collection('blog_posts').createIndex({ slug: 1 }, { unique: true });
   await db.collection('blog_posts').createIndex({ status: 1 });
   await db.collection('blog_posts').createIndex({ author_id: 1 });

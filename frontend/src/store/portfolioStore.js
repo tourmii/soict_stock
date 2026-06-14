@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { INITIAL_CASH } from '../lib/constants';
 import { api } from '../lib/api';
+import { useAuthStore } from './authStore';
 
 export const usePortfolioStore = create((set, get) => ({
     cash: INITIAL_CASH,
@@ -45,7 +46,8 @@ export const usePortfolioStore = create((set, get) => ({
 
         // Sync to backend
         try {
-            await api.executeTrade({ userId: 'default', type: 'Buy', ticker, quantity, orderType });
+            const userId = useAuthStore.getState().user?.id || 'default';
+            await api.executeTrade({ userId, type: 'Buy', ticker, quantity, orderType });
         } catch (err) {
             console.error('Trade sync error:', err);
         }
@@ -95,7 +97,8 @@ export const usePortfolioStore = create((set, get) => ({
 
         // Sync to backend
         try {
-            await api.executeTrade({ userId: 'default', type: 'Sell', ticker, quantity, orderType });
+            const userId = useAuthStore.getState().user?.id || 'default';
+            await api.executeTrade({ userId, type: 'Sell', ticker, quantity, orderType });
         } catch (err) {
             console.error('Trade sync error:', err);
         }
@@ -106,7 +109,8 @@ export const usePortfolioStore = create((set, get) => ({
     /* Load portfolio from backend API */
     loadFromBackend: async (prices = {}) => {
         try {
-            const data = await api.getPortfolio('default');
+            const userId = useAuthStore.getState().user?.id || 'default';
+            const data = await api.getPortfolio(userId);
             if (data) {
                 const holdingsMap = {};
                 for (const h of (data.holdings || [])) {

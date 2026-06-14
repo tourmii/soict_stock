@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useAuthStore } from '../../store/authStore';
+import { api } from '../../lib/api';
 
 export default function AuthModal({ isOpen, onClose }) {
   const [mode, setMode] = useState('login'); // 'login' | 'signup'
@@ -7,6 +8,8 @@ export default function AuthModal({ isOpen, onClose }) {
   const [password, setPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [unverifiedEmail, setUnverifiedEmail] = useState('');
+  const [resendStatus, setResendStatus] = useState(''); // '' | 'sending' | 'sent'
 
   const { signIn, signUp, loading, error, clearError } = useAuthStore();
 
@@ -14,22 +17,31 @@ export default function AuthModal({ isOpen, onClose }) {
     e.preventDefault();
     clearError();
     setSuccessMsg('');
+    setUnverifiedEmail('');
 
     if (mode === 'login') {
       const result = await signIn(email, password);
       if (!result.error) {
         onClose();
         resetForm();
+      } else if (result.error?.message?.includes('verify your email')) {
+        setUnverifiedEmail(email);
       }
     } else {
       const result = await signUp(email, password, displayName);
       if (!result.error) {
-        setSuccessMsg('Account created! Check your email for verification, or you may be auto-logged in.');
-        setTimeout(() => {
-          onClose();
-          resetForm();
-        }, 2000);
+        setSuccessMsg(result.data?.message || 'Account created! Check your email to verify before signing in.');
       }
+    }
+  };
+
+  const handleResend = async () => {
+    setResendStatus('sending');
+    try {
+      await api.resendVerification(unverifiedEmail);
+      setResendStatus('sent');
+    } catch {
+      setResendStatus('');
     }
   };
 
@@ -38,6 +50,8 @@ export default function AuthModal({ isOpen, onClose }) {
     setPassword('');
     setDisplayName('');
     setSuccessMsg('');
+    setUnverifiedEmail('');
+    setResendStatus('');
     clearError();
   };
 
@@ -45,6 +59,8 @@ export default function AuthModal({ isOpen, onClose }) {
     setMode(nextMode);
     clearError();
     setSuccessMsg('');
+    setUnverifiedEmail('');
+    setResendStatus('');
   };
 
   if (!isOpen) return null;
@@ -128,7 +144,7 @@ export default function AuthModal({ isOpen, onClose }) {
             />
           </div>
 
-          {error && (
+          {error && !unverifiedEmail && (
             <div className="auth-error">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="10"></circle>
@@ -136,6 +152,31 @@ export default function AuthModal({ isOpen, onClose }) {
                 <line x1="9" y1="9" x2="15" y2="15"></line>
               </svg>
               {error}
+            </div>
+          )}
+
+          {unverifiedEmail && (
+            <div className="auth-unverified">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                <polyline points="22,6 12,13 2,6"></polyline>
+              </svg>
+              <div>
+                <div style={{ fontWeight: 600, marginBottom: 4 }}>Email not verified</div>
+                <div style={{ fontSize: 12 }}>Check your inbox for the verification link.</div>
+                {resendStatus === 'sent' ? (
+                  <div style={{ color: '#16A34A', fontSize: 12, marginTop: 6, fontWeight: 600 }}>New link sent!</div>
+                ) : (
+                  <button
+                    type="button"
+                    className="auth-resend-btn"
+                    onClick={handleResend}
+                    disabled={resendStatus === 'sending'}
+                  >
+                    {resendStatus === 'sending' ? 'Sending…' : 'Resend verification email'}
+                  </button>
+                )}
+              </div>
             </div>
           )}
 
@@ -162,7 +203,7 @@ export default function AuthModal({ isOpen, onClose }) {
 
         <p className="auth-footer">
           {mode === 'login' ? "Don't have an account? " : 'Already have an account? '}
-          <button className="auth-switch" onClick={switchMode}>
+          <button className="auth-switch" onClick={() => switchMode(mode === 'login' ? 'signup' : 'login')}>
             {mode === 'login' ? 'Sign Up' : 'Sign In'}
           </button>
         </p>
@@ -362,6 +403,38 @@ export default function AuthModal({ isOpen, onClose }) {
         }
         .auth-switch:hover {
           text-decoration: underline;
+        }
+        .auth-unverified {
+          display: flex;
+          align-items: flex-start;
+          gap: 10px;
+          padding: 12px 14px;
+          background: #FFF7ED;
+          border: 1px solid #FED7AA;
+          border-radius: 10px;
+          color: #C2410C;
+          font-size: 13px;
+        }
+        .auth-unverified svg {
+          flex-shrink: 0;
+          margin-top: 1px;
+        }
+        .auth-resend-btn {
+          background: none;
+          border: none;
+          color: #C2410C;
+          font-weight: 700;
+          font-size: 12px;
+          font-family: inherit;
+          cursor: pointer;
+          padding: 0;
+          margin-top: 6px;
+          text-decoration: underline;
+          display: block;
+        }
+        .auth-resend-btn:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
         }
       `}</style>
     </div>
