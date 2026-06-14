@@ -165,6 +165,11 @@ export default function BlogDetail() {
                   <CommentIcon />
                   {formatCompact(post.comment_count || 0)}
                 </a>
+                {user?.id && post.author_id === user.id && (
+                  <Link to={`/my-blogs/${post.id}/edit`} className="blog-edit-link blog-detail__edit-link">
+                    Edit
+                  </Link>
+                )}
               </div>
             </header>
 

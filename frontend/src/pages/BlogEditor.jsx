@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { useAuthStore } from '../store/authStore';
 import { useSettingsStore } from '../store/settingsStore';
@@ -26,6 +26,7 @@ export default function BlogEditor() {
   const { id } = useParams();
   const isNew = !id;
   const navigate = useNavigate();
+  const location = useLocation();
   const user = useAuthStore((s) => s.user);
   const addToast = useSettingsStore((s) => s.addToast);
   const [form, setForm] = useState(emptyForm);
@@ -36,6 +37,7 @@ export default function BlogEditor() {
 
   const canDelete = useMemo(() => post && post.status !== 'published', [post]);
   const previewTags = previewStockTags(form.stock_tags);
+  const previousPage = location.state?.from || (user ? `/profiles/${user.id}` : '/blogs');
 
   useEffect(() => {
     if (isNew || !user) return undefined;
@@ -82,7 +84,7 @@ export default function BlogEditor() {
         : await api.updateBlogPost(id, form, user.id);
       setPost(saved);
       addToast({ type: 'success', title: post?.status === 'published' ? 'Changes saved' : 'Draft saved', message: 'Your blog post has been saved.' });
-      if (isNew) navigate(`/my-blogs/${saved.id}/edit`, { replace: true });
+      if (isNew) navigate(`/my-blogs/${saved.id}/edit`, { replace: true, state: { from: previousPage } });
       return saved;
     } catch (err) {
       setError(err.message || 'Failed to save draft');
@@ -103,7 +105,7 @@ export default function BlogEditor() {
       const published = await api.publishBlogPost(saved.id, user.id);
       setPost(published);
       addToast({ type: 'success', title: 'Post published', message: 'The post is now visible publicly.' });
-      navigate(`/profiles/${user.id}`);
+      navigate(previousPage);
     } catch (err) {
       setError(err.message || 'Failed to publish post');
       addToast({ type: 'error', title: 'Publish failed', message: err.message });
@@ -135,7 +137,7 @@ export default function BlogEditor() {
     try {
       await api.deleteBlogPost(post.id, user.id);
       addToast({ type: 'success', title: 'Post deleted', message: 'The draft or archived post was removed.' });
-      navigate(`/profiles/${user.id}`);
+      navigate(previousPage);
     } catch (err) {
       setError(err.message || 'Failed to delete post');
       addToast({ type: 'error', title: 'Delete failed', message: err.message });
@@ -163,7 +165,7 @@ export default function BlogEditor() {
             <h2>{isNew ? 'Create Blog Post' : 'Edit Blog Post'}</h2>
             <p>Use a simple textarea editor. Public posts must stay educational and non-advisory.</p>
           </div>
-          <Link to={`/profiles/${user.id}`} className="btn btn-outline">Back to Profile</Link>
+          <Link to={previousPage} className="btn btn-outline">Back</Link>
         </div>
 
         {loading && <div className="blog-empty">Loading editor...</div>}
