@@ -13,9 +13,30 @@ async function getOrCreateDefaultContests(db, engine) {
   let contests = await db.collection('contests').find({ status: 'active' }).toArray();
   if (contests.length === 0) {
     const defaultContestsConfig = [
-      { name: 'Weekly Alpha Contest', suffix: 'A' },
-      { name: 'Tech Innovators Sprint', suffix: 'B' },
-      { name: 'Weekend Crypto Dash', suffix: 'C' }
+      { 
+        name: 'Weekly Alpha Contest', 
+        suffix: 'A',
+        rewards: [
+          { rank: '1', type: 'Grand Prize Bundle', name: 'SOICT Stock Champion Pack (T-Shirt + Bottle + Cap)', image: '/soict_stock_tshirt.png', description: 'The complete official merchandise gear set: Premium Cotton Tee, Insulated Thermos Bottle, and Classic Embroidered Cap for the absolute champion.' },
+          { rank: '2 - 5', type: 'Elite Prize Bundle', name: 'SOICT Stock Runner-Up Pack (T-Shirt + Cap)', image: '/soict_stock_cap.png', description: 'Exclusive T-Shirt and Cap combination package for the elite runner-up traders.' }
+        ]
+      },
+      { 
+        name: 'Tech Innovators Sprint', 
+        suffix: 'B',
+        rewards: [
+          { rank: '1', type: 'Grand Prize Bundle', name: 'SOICT Stock Tech Legend Pack (T-Shirt + Bottle + Cap)', image: '/soict_stock_tshirt.png', description: 'Custom printed tech sector champion set: Premium Cotton Tee, Insulated Thermos Bottle, and Classic Embroidered Cap.' },
+          { rank: '2 - 5', type: 'Elite Prize Bundle', name: 'SOICT Stock Tech Legend Pack (T-Shirt + Cap)', image: '/soict_stock_cap.png', description: 'Exclusive T-Shirt and Cap combination package for the tech sprint runner-up traders.' }
+        ]
+      },
+      { 
+        name: 'Weekend Crypto Dash', 
+        suffix: 'C',
+        rewards: [
+          { rank: '1', type: 'Grand Prize Bundle', name: 'SOICT Stock Crypto Bull Pack (T-Shirt + Bottle + Cap)', image: '/soict_stock_tshirt.png', description: 'Premium cotton t-shirt, insulated thermos bottle, and sleek black cap featuring the green bullish chart logo.' },
+          { rank: '2 - 5', type: 'Elite Prize Bundle', name: 'SOICT Stock HODL Pack (T-Shirt + Cap)', image: '/soict_stock_cap.png', description: 'Exclusive T-Shirt and Cap combination package for the top crypto trading runners-up.' }
+        ]
+      }
     ];
 
     for (const config of defaultContestsConfig) {
@@ -41,6 +62,7 @@ async function getOrCreateDefaultContests(db, engine) {
         status: 'active',
         allowedTickers,
         customStocks,
+        rewards: config.rewards,
         createdAt: new Date().toISOString(),
         endTime: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
       };

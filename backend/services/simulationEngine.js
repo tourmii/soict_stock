@@ -19,7 +19,7 @@ import { STOCKS } from './stockData.js';
 
 /* ── Constants ──────────────────────────────────── */
 const BAR_SEC      = 300;           // 5-minute bars
-const HISTORY_DAYS = 365;           // 1 calendar year of stored bars
+const HISTORY_DAYS = 30;            // 30 days of stored bars (safe for Atlas 512MB free tier)
 const YEAR_SEC     = 365 * 24 * 3600;
 const DT_BAR       = 1 / (252 * 78); // fraction of trading year per 5-min bar
 const DT_REALTIME  = 1 / 1000;       // larger dt → visible intraday movement
