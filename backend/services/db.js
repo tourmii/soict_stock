@@ -28,6 +28,11 @@ export async function connectDB() {
   await db.collection('news').createIndex({ timestamp: -1 });
   await db.collection('users').createIndex({ email: 1 }, { unique: true });
 
+  // Contest indexes
+  await db.collection('contests').createIndex({ status: 1 });
+  await db.collection('contest_portfolios').createIndex({ contestId: 1, userId: 1 }, { unique: true });
+  await db.collection('contest_portfolios').createIndex({ contestId: 1, portfolioValue: -1 });
+
   console.log(`✅ Connected to MongoDB: ${DB_NAME}`);
   return db;
 }

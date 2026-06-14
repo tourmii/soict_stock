@@ -6,6 +6,8 @@ import Landing from './pages/Landing';
 import Simulation from './pages/Simulation';
 import Portfolio from './pages/Portfolio';
 import Leaderboard from './pages/Leaderboard';
+import Contest from './pages/Contest';
+import ContestArena from './pages/ContestArena';
 
 import Learn from './pages/Learn';
 import Toast from './components/shared/Toast';
@@ -141,6 +143,8 @@ function App() {
           <Route path="/simulation" element={<Simulation />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/contest" element={<Contest />} />
+          <Route path="/contest/arena/:contestId" element={<ContestArena />} />
           <Route path="/learn" element={<Learn />} />
           <Route path="/index.html" element={<Navigate to="/" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
