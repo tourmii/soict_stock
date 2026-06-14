@@ -22,6 +22,21 @@ function CommentIcon() {
   );
 }
 
+function renderStockMentions(text) {
+  const parts = String(text || '').split(/(\$[A-Za-z][A-Za-z0-9]{0,11}\b)/g);
+  return parts.map((part, index) => {
+    const match = part.match(/^\$([A-Za-z][A-Za-z0-9]{0,11})$/);
+    if (!match) return part;
+
+    const tag = match[1].toUpperCase();
+    return (
+      <Link key={`${tag}-${index}`} to={`/blogs?stock=${encodeURIComponent(tag)}`} className="blog-inline-stock">
+        ${tag}
+      </Link>
+    );
+  });
+}
+
 export default function BlogDetail() {
   const { slug } = useParams();
   const location = useLocation();
@@ -140,7 +155,7 @@ export default function BlogDetail() {
                   ))}
                 </div>
               )}
-              {post.excerpt && <p>{post.excerpt}</p>}
+              {post.excerpt && <p>{renderStockMentions(post.excerpt)}</p>}
               <div className="blog-detail__social">
                 <div className="blog-vote-pill" aria-label={`${post.upvotes || 0} upvotes`}>
                   <button
@@ -178,7 +193,7 @@ export default function BlogDetail() {
             )}
 
             <div className="blog-disclaimer">{DISCLAIMER}</div>
-            <div className="blog-detail__content">{post.content}</div>
+            <div className="blog-detail__content">{renderStockMentions(post.content)}</div>
 
             <section className="blog-comments" id="comments">
               <div className="blog-comments__header">

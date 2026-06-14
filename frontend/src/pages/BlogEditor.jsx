@@ -10,16 +10,20 @@ const emptyForm = {
   excerpt: '',
   content: '',
   cover_image_url: '',
-  stock_tags: '',
 };
 
-function previewStockTags(value) {
-  return String(value || '')
-    .split(/[\s,;]+/)
-    .map((tag) => tag.trim().replace(/^\$/, '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12))
-    .filter(Boolean)
-    .filter((tag, index, tags) => tags.indexOf(tag) === index)
-    .slice(0, 8);
+function previewStockTags(...values) {
+  const text = values.map((value) => String(value || '')).join(' ');
+  const matches = text.matchAll(/\$([A-Za-z][A-Za-z0-9]{0,11})\b/g);
+  const tags = [];
+
+  for (const match of matches) {
+    const tag = match[1].toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+    if (tag && !tags.includes(tag)) tags.push(tag);
+    if (tags.length >= 8) break;
+  }
+
+  return tags;
 }
 
 export default function BlogEditor() {
@@ -36,7 +40,7 @@ export default function BlogEditor() {
   const [error, setError] = useState('');
 
   const canDelete = useMemo(() => post && post.status !== 'published', [post]);
-  const previewTags = previewStockTags(form.stock_tags);
+  const previewTags = previewStockTags(form.title, form.excerpt, form.content);
   const previousPage = location.state?.from || (user ? `/profiles/${user.id}` : '/blogs');
 
   useEffect(() => {
@@ -57,7 +61,6 @@ export default function BlogEditor() {
           excerpt: found.excerpt || '',
           content: found.content || '',
           cover_image_url: found.cover_image_url || '',
-          stock_tags: (found.stock_tags || []).join(', '),
         });
       })
       .catch((err) => {
@@ -163,7 +166,7 @@ export default function BlogEditor() {
           <div>
             <span className="badge badge-primary">{isNew ? 'New Post' : `Editing ${post?.status || 'post'}`}</span>
             <h2>{isNew ? 'Create Blog Post' : 'Edit Blog Post'}</h2>
-            <p>Use a simple textarea editor. Public posts must stay educational and non-advisory.</p>
+            <p>Use $SCT-style mentions in your title, excerpt, or content to tag stocks.</p>
           </div>
           <Link to={previousPage} className="btn btn-outline">Back</Link>
         </div>
@@ -202,16 +205,6 @@ export default function BlogEditor() {
                   value={form.cover_image_url}
                   onChange={(e) => updateField('cover_image_url', e.target.value)}
                   placeholder="https://example.com/cover.jpg"
-                />
-              </label>
-
-              <label>
-                <span>Stock Tags</span>
-                <input
-                  className="input"
-                  value={form.stock_tags}
-                  onChange={(e) => updateField('stock_tags', e.target.value)}
-                  placeholder="$SCT, $HEAL"
                 />
               </label>
 
