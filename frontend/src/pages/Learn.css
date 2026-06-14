@@ -314,6 +314,68 @@
   border-radius: var(--radius-md);
   background: #F8F9FF;
 }
+.learning-path-card__quizzes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 2px;
+}
+.learning-path-card__quizzes h4 {
+  color: var(--gray-900);
+  font-size: 13px;
+  margin-bottom: 2px;
+}
+.learning-path-card__quiz {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: all 0.2s;
+}
+.learning-path-card__quiz:hover {
+  border-color: var(--primary);
+  background: #F8F9FF;
+}
+.learning-path-card__quiz strong,
+.learning-path-card__quiz small {
+  display: block;
+}
+.learning-path-card__quiz strong {
+  color: var(--gray-800);
+  font-size: 13px;
+}
+.learning-path-card__quiz small {
+  color: var(--gray-500);
+  font-size: 11px;
+  margin-top: 2px;
+}
+.learning-path-card__quiz em {
+  flex-shrink: 0;
+  padding: 4px 8px;
+  border-radius: var(--radius-full);
+  background: #EEF2FF;
+  color: var(--primary);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+}
+.learning-path-card__quiz--done {
+  border-color: #BBF7D0;
+  background: #F0FDF4;
+}
+.learning-path-card__quiz--done em {
+  background: #DCFCE7;
+  color: #15803D;
+}
 
 /* Achievements */
 .achievements-grid {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { LESSONS } from '../../lib/learningData';
 import { useLearningStore } from '../../store/learningStore';
 
@@ -12,8 +12,13 @@ export default function QuizModule({ quiz, onReviewLesson }) {
   const [finished, setFinished] = useState(false);
   const [saved, setSaved] = useState(false);
   const [answers, setAnswers] = useState([]);
+  const [attemptSeed, setAttemptSeed] = useState(0);
 
-  const q = quiz.questions[currentQ];
+  const questions = useMemo(
+    () => quiz.questions.map((question, index) => shuffleQuestionOptions(question, index, attemptSeed)),
+    [quiz.questions, attemptSeed]
+  );
+  const q = questions[currentQ];
   const passingScore = quiz.passingScore || 70;
 
   const handleSelect = (optionIndex) => {
@@ -22,7 +27,17 @@ export default function QuizModule({ quiz, onReviewLesson }) {
     setShowExplanation(true);
     const isCorrect = optionIndex === q.correct;
     if (isCorrect) setScore((s) => s + 1);
-    setAnswers((prev) => [...prev, { question: q.question, selected: optionIndex, correct: q.correct, isCorrect, explanation: q.explanation }]);
+    setAnswers((prev) => [
+      ...prev,
+      {
+        question: q.question,
+        selected: optionIndex,
+        correct: q.correct,
+        correctAnswer: q.options[q.correct],
+        isCorrect,
+        explanation: q.explanation,
+      },
+    ]);
   };
 
   const handleNext = async () => {
@@ -47,6 +62,7 @@ export default function QuizModule({ quiz, onReviewLesson }) {
     setFinished(false);
     setSaved(false);
     setAnswers([]);
+    setAttemptSeed((seed) => seed + 1);
   };
 
   if (finished) {
@@ -92,7 +108,7 @@ export default function QuizModule({ quiz, onReviewLesson }) {
               <div className="quiz-review-item__indicator">{a.isCorrect ? 'OK' : 'NO'}</div>
               <div className="quiz-review-item__text">
                 <div className="quiz-review-item__q">{a.question}</div>
-                {!a.isCorrect && <div className="quiz-review-item__answer">Correct: {quiz.questions[i].options[a.correct]}</div>}
+                {!a.isCorrect && <div className="quiz-review-item__answer">Correct: {a.correctAnswer}</div>}
                 <p className="quiz-review-item__explanation">{a.explanation}</p>
               </div>
             </div>
@@ -131,7 +147,7 @@ export default function QuizModule({ quiz, onReviewLesson }) {
           }
 
           return (
-            <button key={opt} className={cls} onClick={() => handleSelect(idx)} disabled={showExplanation}>
+            <button key={`${opt}-${idx}`} className={cls} onClick={() => handleSelect(idx)} disabled={showExplanation}>
               <span className="quiz-option__letter">{String.fromCharCode(65 + idx)}</span>
               <span className="quiz-option__text">{opt}</span>
               {showExplanation && idx === q.correct && <span className="quiz-option__icon">OK</span>}
@@ -158,6 +174,33 @@ export default function QuizModule({ quiz, onReviewLesson }) {
       )}
     </div>
   );
+}
+
+function shuffleQuestionOptions(question, questionIndex = 0, attemptSeed = 0) {
+  const correctAnswer = question.options[question.correct];
+  const distractors = question.options.filter((_, index) => index !== question.correct);
+
+  for (let i = distractors.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [distractors[i], distractors[j]] = [distractors[j], distractors[i]];
+  }
+
+  const correctSlot = question.options.length > 0
+    ? (questionIndex + attemptSeed + 1) % question.options.length
+    : 0;
+  const options = [];
+  let distractorIndex = 0;
+
+  for (let i = 0; i < question.options.length; i += 1) {
+    options.push(i === correctSlot ? correctAnswer : distractors[distractorIndex]);
+    if (i !== correctSlot) distractorIndex += 1;
+  }
+
+  return {
+    ...question,
+    options,
+    correct: correctSlot,
+  };
 }
 
 function QuizHistory({ result, compact = false }) {

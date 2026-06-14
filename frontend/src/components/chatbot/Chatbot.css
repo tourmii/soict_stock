@@ -1,5 +1,7 @@
 .chatbot-widget {
   position: fixed;
+  width: 60px;
+  height: 60px;
   z-index: calc(var(--z-toast) - 1);
   touch-action: none;
 }
@@ -40,6 +42,9 @@
 }
 
 .chatbot-panel {
+  position: absolute;
+  left: var(--chatbot-panel-left, calc(60px - min(420px, calc(100vw - 32px))));
+  top: var(--chatbot-panel-top, calc(60px - min(640px, calc(100vh - 48px))));
   width: min(420px, calc(100vw - 32px));
   height: min(640px, calc(100vh - 48px));
   display: flex;

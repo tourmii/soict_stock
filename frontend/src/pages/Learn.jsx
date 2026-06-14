@@ -115,8 +115,14 @@ export default function Learn() {
   };
 
   const continuePath = (path) => {
-    const lessonId = getNextLessonInPath(path, lessonProgress) || path.lessonIds[0];
-    openLesson(lessonId);
+    const lessonId = getNextLessonInPath(path, lessonProgress);
+    if (lessonId) {
+      openLesson(lessonId);
+      return;
+    }
+
+    const quizId = path.quizIds.find((id) => !quizResults[id]?.completed) || path.quizIds[0];
+    openQuiz(quizId);
   };
 
   const earnedBadgeCount = earnedBadges.length;
@@ -225,7 +231,10 @@ export default function Learn() {
                 key={path.id}
                 path={path}
                 progress={calculatePathProgress(path, lessonProgress, quizResults)}
+                quizzes={QUIZZES}
+                quizResults={quizResults}
                 onContinue={continuePath}
+                onStartQuiz={openQuiz}
               />
             ))}
           </div>
