@@ -2,61 +2,57 @@ import { useNewsStore } from '../../store/newsStore';
 import { formatRelativeTime } from '../../lib/formatters';
 import NewsModal from '../shared/NewsModal';
 
+const SENTIMENT_ICON = { positive: '▲', negative: '▼', neutral: '—' };
+const SENTIMENT_COLOR = { positive: 'var(--green)', negative: 'var(--red)', neutral: 'var(--gray-400)' };
+
 export default function NewsPanel() {
-  const newsItems = useNewsStore((s) => s.newsItems);
-  const selectedNews = useNewsStore((s) => s.selectedNews);
+  const newsItems       = useNewsStore((s) => s.newsItems);
+  const selectedNews    = useNewsStore((s) => s.selectedNews);
   const setSelectedNews = useNewsStore((s) => s.setSelectedNews);
-  const clearSelectedNews = useNewsStore((s) => s.clearSelectedNews);
-  const display = newsItems.slice(0, 8);
+  const clearSelected   = useNewsStore((s) => s.clearSelectedNews);
 
   return (
     <>
-      <div className="card" style={{padding:0,overflow:'hidden'}}>
-        <div style={{padding:'14px 16px',borderBottom:'var(--border-light)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-          <h5 style={{fontSize:'var(--text-sm)',fontWeight:700}}>📰 Market News</h5>
-          <span className="badge badge-primary" style={{fontSize:'10px'}}>Live</span>
+      <div className="news-panel">
+        <div className="panel-header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>Market News</span>
+          <span className="news-live-dot" />
         </div>
-        <div style={{maxHeight:'320px',overflowY:'auto'}}>
-          {display.length === 0 ? (
-            <p style={{padding:'20px',textAlign:'center',fontSize:'var(--text-sm)',color:'var(--gray-400)'}}>No news yet</p>
-          ) : display.map((item) => (
+
+        <div className="news-panel__list">
+          {newsItems.length === 0 && (
+            <div className="news-panel__empty">No news yet…</div>
+          )}
+          {newsItems.slice(0, 10).map((item) => (
             <div
               key={item.id}
+              className="news-row"
               onClick={() => setSelectedNews(item)}
-              style={{padding:'10px 16px',borderBottom:'1px solid var(--gray-50)',cursor:'pointer',transition:'background 0.15s'}}
-              onMouseEnter={(e)=>e.currentTarget.style.background='var(--gray-50)'}
-              onMouseLeave={(e)=>e.currentTarget.style.background='transparent'}
             >
-              <div style={{display:'flex',alignItems:'flex-start',gap:'8px'}}>
-                <span style={{fontSize:'14px',flexShrink:0,marginTop:'2px'}}>
-                  {item.sentiment === 'positive' ? '📈' : item.sentiment === 'negative' ? '📉' : '📊'}
-                </span>
-                <div style={{flex:1,minWidth:0}}>
-                  <p style={{fontSize:'12px',fontWeight:500,color:'var(--gray-800)',lineHeight:1.4,marginBottom:'4px'}}>{item.headline}</p>
-                  <div style={{display:'flex',alignItems:'center',gap:'6px',fontSize:'11px',flexWrap:'wrap'}}>
-                    {item.affectedTickers && item.affectedTickers.length > 0 && !item.isMarketWide && (
-                      item.affectedTickers.slice(0, 3).map((t) => (
-                        <span key={t} className={`badge ${item.sentiment==='positive'?'badge-green':'badge-red'}`} style={{fontSize:'10px'}}>{t}</span>
-                      ))
-                    )}
-                    {item.isMarketWide && (
-                      <span className="badge badge-gray" style={{fontSize:'10px'}}>Market-Wide</span>
-                    )}
-                    {item.source && item.source !== 'SoictStock Simulation' && (
-                      <span style={{color:'var(--gray-500)',fontWeight:500}}>{item.source}</span>
-                    )}
-                    <span style={{color:'var(--gray-400)'}}>{formatRelativeTime(item.timestamp)}</span>
-                  </div>
+              <span
+                className="news-row__icon"
+                style={{ color: SENTIMENT_COLOR[item.sentiment] || 'var(--gray-400)' }}
+              >
+                {SENTIMENT_ICON[item.sentiment] || '—'}
+              </span>
+              <div className="news-row__body">
+                <p className="news-row__headline">{item.headline}</p>
+                <div className="news-row__meta">
+                  {item.affectedTickers && !item.isMarketWide &&
+                    item.affectedTickers.slice(0, 2).map((t) => (
+                      <span key={t} className={`news-tag ${item.sentiment}`}>{t}</span>
+                    ))
+                  }
+                  {item.isMarketWide && <span className="news-tag neutral">Market</span>}
+                  <span className="news-row__time">{formatRelativeTime(item.timestamp)}</span>
                 </div>
-                <span style={{fontSize:'10px',color:'var(--gray-300)',marginTop:'4px',flexShrink:0}}>▸</span>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      {/* News Detail Modal */}
-      <NewsModal item={selectedNews} onClose={clearSelectedNews} />
+      <NewsModal item={selectedNews} onClose={clearSelected} />
     </>
   );
 }

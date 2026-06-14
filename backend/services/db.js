@@ -50,6 +50,8 @@ export async function connectDB() {
   await db.collection('blog_posts').createIndex({ status: 1 });
   await db.collection('blog_posts').createIndex({ author_id: 1 });
   await db.collection('blog_posts').createIndex({ published_at: -1 });
+  await db.collection('learning_progress').createIndex({ userId: 1 }, { unique: true });
+  await db.collection('chatbot_conversations').createIndex({ userId: 1 }, { unique: true });
 
   console.log(`✅ Connected to MongoDB: ${dbName}`);
   return db;

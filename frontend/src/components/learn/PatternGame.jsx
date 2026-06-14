@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useMarketStore } from '../../store/marketStore';
 import { STOCKS } from '../../lib/constants';
 import { CANDLESTICK_PATTERNS } from '../../lib/learningData';
@@ -9,22 +9,21 @@ export default function PatternGame() {
   const rawTicks = useMarketStore((s) => s.rawTicks);
   const histories = useMemo(() => getHistories(), [rawTicks]);
   const [score, setScore] = useState(0);
-  const [round, setRound] = useState(0);
   const [totalRounds, setTotalRounds] = useState(0);
   const [answered, setAnswered] = useState(false);
   const [correct, setCorrect] = useState(false);
   const [selectedAnswer, setSelectedAnswer] = useState(null);
+  const [challenge, setChallenge] = useState(null);
 
   const generateChallenge = useCallback(() => {
-    const tickers = Object.keys(histories);
-    if (tickers.length === 0) return null;
-    const ticker = tickers[Math.floor(Math.random() * tickers.length)];
-    const hist = histories[ticker];
-    if (!hist || hist.length < 30) return null;
+    const eligibleHistories = Object.entries(histories).filter(([, hist]) => hist && hist.length >= 13);
+    if (eligibleHistories.length === 0) return null;
 
     // Find a pattern in the history
     for (let attempt = 0; attempt < 50; attempt++) {
-      const startIdx = Math.floor(Math.random() * (hist.length - 20)) + 5;
+      const [ticker, hist] = eligibleHistories[Math.floor(Math.random() * eligibleHistories.length)];
+      const maxStartIdx = hist.length - 8;
+      const startIdx = Math.floor(Math.random() * (maxStartIdx - 5 + 1)) + 5;
       for (const pattern of CANDLESTICK_PATTERNS) {
         if (pattern.detect(hist, startIdx)) {
           const segment = hist.slice(startIdx - 5, startIdx + 8);
@@ -48,16 +47,22 @@ export default function PatternGame() {
     }
 
     // Fallback: random segment with random pattern question
-    const ticker2 = tickers[0];
-    const hist2 = histories[ticker2];
-    const start = Math.max(0, hist2.length - 20);
+    const [ticker2, hist2] = eligibleHistories[Math.floor(Math.random() * eligibleHistories.length)];
+    const start = Math.max(0, hist2.length - 13);
     const segment = hist2.slice(start, start + 13);
     const randomPattern = CANDLESTICK_PATTERNS[Math.floor(Math.random() * CANDLESTICK_PATTERNS.length)];
-    const options = CANDLESTICK_PATTERNS.slice(0, 4).sort(() => Math.random() - 0.5);
-    return { ticker: ticker2, segment, patternIdx: 5, pattern: randomPattern, afterMove: 0, options, correctIdx: 0, stock: STOCKS.find((s) => s.ticker === ticker2) };
+    const wrongPatterns = CANDLESTICK_PATTERNS
+      .filter((p) => p.name !== randomPattern.name)
+      .sort(() => Math.random() - 0.5)
+      .slice(0, 3);
+    const options = [randomPattern, ...wrongPatterns].sort(() => Math.random() - 0.5);
+    const correctIdx = options.findIndex((o) => o.name === randomPattern.name);
+    return { ticker: ticker2, segment, patternIdx: Math.min(5, segment.length - 1), pattern: randomPattern, afterMove: 0, options, correctIdx, stock: STOCKS.find((s) => s.ticker === ticker2) };
   }, [histories]);
 
-  const challenge = useMemo(() => generateChallenge(), [round, generateChallenge]);
+  useEffect(() => {
+    setChallenge((current) => current || generateChallenge());
+  }, [generateChallenge]);
 
   const handleAnswer = (idx) => {
     if (answered) return;
@@ -70,10 +75,10 @@ export default function PatternGame() {
   };
 
   const nextRound = () => {
-    setRound((r) => r + 1);
     setAnswered(false);
     setSelectedAnswer(null);
     setCorrect(false);
+    setChallenge(generateChallenge());
   };
 
   if (!challenge) {
@@ -119,7 +124,7 @@ export default function PatternGame() {
                 <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: `${wickTop}px`, width: '2px', height: `${wickH}px`, background: isGreen ? '#22C55E' : '#EF4444' }} />
                 {/* Body */}
                 <div style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)', top: `${bodyY}px`, width: isHighlight ? '18px' : '14px', height: `${bodyH}px`, background: isGreen ? '#22C55E' : '#EF4444', borderRadius: '2px', border: isHighlight ? '2px solid #1B3BFC' : 'none', boxShadow: isHighlight ? '0 0 8px rgba(27,59,252,0.3)' : 'none' }} />
-                {isHighlight && <div style={{ position: 'absolute', bottom: '-24px', left: '50%', transform: 'translateX(-50)', fontSize: '10px', color: '#1B3BFC', fontWeight: 700 }}>▲</div>}
+                {isHighlight && <div style={{ position: 'absolute', bottom: '-24px', left: '50%', transform: 'translateX(-50%)', fontSize: '10px', color: '#1B3BFC', fontWeight: 700 }}>▲</div>}
               </div>
             );
           })}

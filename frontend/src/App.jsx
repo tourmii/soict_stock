@@ -13,6 +13,7 @@ import BlogEditor from './pages/BlogEditor';
 
 import Learn from './pages/Learn';
 import Toast from './components/shared/Toast';
+import ChatbotWidget from './components/chatbot/ChatbotWidget';
 import { useMarketStore } from './store/marketStore';
 import { useNewsStore } from './store/newsStore';
 import { useOrderStore } from './store/orderStore';
@@ -34,10 +35,12 @@ function App() {
   const loadPortfolio = usePortfolioStore((s) => s.loadFromBackend);
   const fetchLeaderboard = useLeaderboardStore((s) => s.fetchFromBackend);
 
-  const updatePrices = useMarketStore((s) => s.updatePrices);
+  const updatePrices   = useMarketStore((s) => s.updatePrices);
   const initFromServer = useMarketStore((s) => s.initFromServer);
-  const isConnected = useMarketStore((s) => s.isConnected);
-  const setConnected = useMarketStore((s) => s.setConnected);
+  const setLoading     = useMarketStore((s) => s.setLoading);
+  const setInitProgress = useMarketStore((s) => s.setInitProgress);
+  const isConnected    = useMarketStore((s) => s.isConnected);
+  const setConnected   = useMarketStore((s) => s.setConnected);
 
   const initializeAuth = useAuthStore((s) => s.initialize);
   const user = useAuthStore((s) => s.user);
@@ -59,8 +62,8 @@ function App() {
   // WebSocket connection for live market data
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws`;
-    const ws = new WebSocket(wsUrl);
+    const wsUrl    = `${protocol}//${window.location.host}/ws`;
+    const ws       = new WebSocket(wsUrl);
 
     ws.onopen = () => {
       console.log('Connected to market data stream');
@@ -70,10 +73,13 @@ function App() {
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
       if (msg.type === 'init') {
-        // Replace local data with server's consistent history
         initFromServer(msg.data);
       } else if (msg.type === 'tick') {
         updatePrices(msg.data);
+      } else if (msg.type === 'loading') {
+        setLoading(true);
+      } else if (msg.type === 'init_progress') {
+        setInitProgress(msg.data);
       }
     };
 
@@ -156,6 +162,7 @@ function App() {
         </Routes>
       </main>
       <Footer />
+      <ChatbotWidget />
       <Toast />
     </Router>
   );

@@ -1,14 +1,20 @@
 import { useState } from 'react';
+import { LESSONS } from '../../lib/learningData';
+import { useLearningStore } from '../../store/learningStore';
 
-export default function QuizModule({ quiz }) {
+export default function QuizModule({ quiz, onReviewLesson }) {
+  const quizResult = useLearningStore((state) => state.quizResults[quiz.id]);
+  const saveQuizResult = useLearningStore((state) => state.saveQuizResult);
   const [currentQ, setCurrentQ] = useState(0);
   const [selected, setSelected] = useState(null);
   const [showExplanation, setShowExplanation] = useState(false);
   const [score, setScore] = useState(0);
   const [finished, setFinished] = useState(false);
+  const [saved, setSaved] = useState(false);
   const [answers, setAnswers] = useState([]);
 
   const q = quiz.questions[currentQ];
+  const passingScore = quiz.passingScore || 70;
 
   const handleSelect = (optionIndex) => {
     if (showExplanation) return;
@@ -16,16 +22,20 @@ export default function QuizModule({ quiz }) {
     setShowExplanation(true);
     const isCorrect = optionIndex === q.correct;
     if (isCorrect) setScore((s) => s + 1);
-    setAnswers((prev) => [...prev, { question: q.question, selected: optionIndex, correct: q.correct, isCorrect }]);
+    setAnswers((prev) => [...prev, { question: q.question, selected: optionIndex, correct: q.correct, isCorrect, explanation: q.explanation }]);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (currentQ < quiz.questions.length - 1) {
       setCurrentQ((c) => c + 1);
       setSelected(null);
       setShowExplanation(false);
-    } else {
-      setFinished(true);
+      return;
+    }
+    setFinished(true);
+    if (!saved) {
+      setSaved(true);
+      await saveQuizResult(quiz.id, score, quiz.questions.length);
     }
   };
 
@@ -35,41 +45,62 @@ export default function QuizModule({ quiz }) {
     setShowExplanation(false);
     setScore(0);
     setFinished(false);
+    setSaved(false);
     setAnswers([]);
   };
 
   if (finished) {
     const percentage = Math.round((score / quiz.questions.length) * 100);
-    const emoji = percentage >= 80 ? '🏆' : percentage >= 60 ? '👍' : '📚';
+    const passed = percentage >= passingScore;
+    const reviewLessons = (quiz.relatedLessonIds || [])
+      .map((lessonId) => LESSONS.find((lesson) => lesson.id === lessonId))
+      .filter(Boolean);
+
     return (
       <div className="quiz-results">
         <div className="quiz-results__header">
-          <span className="quiz-results__emoji">{emoji}</span>
-          <h4>Quiz Complete!</h4>
+          <span className="quiz-results__emoji">{passed ? 'Pass' : 'Review'}</span>
+          <h4>{passed ? 'Quiz passed' : 'Quiz complete'}</h4>
           <p className="quiz-results__score">
             You scored <strong>{score}/{quiz.questions.length}</strong> ({percentage}%)
           </p>
+          <p className={`quiz-results__status ${passed ? 'quiz-results__status--pass' : 'quiz-results__status--fail'}`}>
+            {passed ? `Passed at ${passingScore}% threshold` : `Below ${passingScore}% passing threshold`}
+          </p>
           <div className="quiz-results__bar">
-            <div className="quiz-results__bar-fill" style={{ width: `${percentage}%`, background: percentage >= 80 ? '#22C55E' : percentage >= 60 ? '#F59E0B' : '#EF4444' }} />
+            <div className="quiz-results__bar-fill" style={{ width: `${percentage}%`, background: passed ? '#22C55E' : '#EF4444' }} />
           </div>
         </div>
+
+        <QuizHistory result={quizResult} />
+
+        {!passed && reviewLessons.length > 0 && (
+          <div className="quiz-review-lessons">
+            <h5>Recommended Review Lessons</h5>
+            {reviewLessons.map((lesson) => (
+              <button key={lesson.id} className="quiz-review-lesson" onClick={() => onReviewLesson?.(lesson.id)}>
+                <span>{lesson.title}</span>
+                <small>{lesson.category}</small>
+              </button>
+            ))}
+          </div>
+        )}
+
         <div className="quiz-results__review">
           {answers.map((a, i) => (
-            <div key={i} className={`quiz-review-item ${a.isCorrect ? 'quiz-review-item--correct' : 'quiz-review-item--wrong'}`}>
-              <div className="quiz-review-item__indicator">{a.isCorrect ? '✓' : '✗'}</div>
+            <div key={`${a.question}-${i}`} className={`quiz-review-item ${a.isCorrect ? 'quiz-review-item--correct' : 'quiz-review-item--wrong'}`}>
+              <div className="quiz-review-item__indicator">{a.isCorrect ? 'OK' : 'NO'}</div>
               <div className="quiz-review-item__text">
                 <div className="quiz-review-item__q">{a.question}</div>
-                {!a.isCorrect && (
-                  <div className="quiz-review-item__answer">
-                    Correct: {quiz.questions[i].options[a.correct]}
-                  </div>
-                )}
+                {!a.isCorrect && <div className="quiz-review-item__answer">Correct: {quiz.questions[i].options[a.correct]}</div>}
+                <p className="quiz-review-item__explanation">{a.explanation}</p>
               </div>
             </div>
           ))}
         </div>
+
         <button className="btn btn-primary" onClick={handleRetry} style={{ marginTop: '16px' }}>
-          🔄 Retry Quiz
+          Retry Quiz
         </button>
       </div>
     );
@@ -77,12 +108,14 @@ export default function QuizModule({ quiz }) {
 
   return (
     <div className="quiz-module">
+      <QuizHistory result={quizResult} compact />
+
       <div className="quiz-module__progress">
         <div className="quiz-module__counter">
           Question {currentQ + 1} of {quiz.questions.length}
         </div>
         <div className="quiz-module__bar">
-          <div className="quiz-module__bar-fill" style={{ width: `${((currentQ) / quiz.questions.length) * 100}%` }} />
+          <div className="quiz-module__bar-fill" style={{ width: `${((currentQ + (showExplanation ? 1 : 0)) / quiz.questions.length) * 100}%` }} />
         </div>
         <div className="quiz-module__score">Score: {score}</div>
       </div>
@@ -95,16 +128,14 @@ export default function QuizModule({ quiz }) {
           if (showExplanation) {
             if (idx === q.correct) cls += ' quiz-option--correct';
             else if (idx === selected) cls += ' quiz-option--wrong';
-          } else if (idx === selected) {
-            cls += ' quiz-option--selected';
           }
 
           return (
-            <button key={idx} className={cls} onClick={() => handleSelect(idx)} disabled={showExplanation}>
+            <button key={opt} className={cls} onClick={() => handleSelect(idx)} disabled={showExplanation}>
               <span className="quiz-option__letter">{String.fromCharCode(65 + idx)}</span>
               <span className="quiz-option__text">{opt}</span>
-              {showExplanation && idx === q.correct && <span className="quiz-option__icon">✓</span>}
-              {showExplanation && idx === selected && idx !== q.correct && <span className="quiz-option__icon">✗</span>}
+              {showExplanation && idx === q.correct && <span className="quiz-option__icon">OK</span>}
+              {showExplanation && idx === selected && idx !== q.correct && <span className="quiz-option__icon">NO</span>}
             </button>
           );
         })}
@@ -112,9 +143,9 @@ export default function QuizModule({ quiz }) {
 
       {showExplanation && (
         <div className={`quiz-explanation ${selected === q.correct ? 'quiz-explanation--correct' : 'quiz-explanation--wrong'}`}>
-          <div className="quiz-explanation__icon">{selected === q.correct ? '✅' : '💡'}</div>
+          <div className="quiz-explanation__icon">{selected === q.correct ? 'OK' : 'Tip'}</div>
           <div>
-            <strong>{selected === q.correct ? 'Correct!' : 'Not quite!'}</strong>
+            <strong>{selected === q.correct ? 'Correct' : 'Not quite'}</strong>
             <p>{q.explanation}</p>
           </div>
         </div>
@@ -122,9 +153,20 @@ export default function QuizModule({ quiz }) {
 
       {showExplanation && (
         <button className="btn btn-primary quiz-next-btn" onClick={handleNext}>
-          {currentQ < quiz.questions.length - 1 ? 'Next Question →' : 'See Results'}
+          {currentQ < quiz.questions.length - 1 ? 'Next Question' : 'See Results'}
         </button>
       )}
+    </div>
+  );
+}
+
+function QuizHistory({ result, compact = false }) {
+  if (!result?.attempts?.length) return null;
+  return (
+    <div className={`quiz-history ${compact ? 'quiz-history--compact' : ''}`}>
+      <span>Previous attempts: {result.attempts.length}</span>
+      <span>Best: {result.bestScore || 0}%</span>
+      <span>Last: {result.lastScore || 0}%</span>
     </div>
   );
 }

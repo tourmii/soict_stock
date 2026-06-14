@@ -47,6 +47,16 @@ export const api = {
       body: JSON.stringify({ message, mode, context }),
     }),
 
+  /* Chatbot */
+  sendChatbotMessage: (payload) =>
+    request('/chatbot/message', { method: 'POST', body: JSON.stringify(payload) }),
+  getChatbotHistory: (userId) =>
+    request(`/chatbot/history?userId=${encodeURIComponent(userId)}`),
+  saveChatbotHistory: (payload) =>
+    request('/chatbot/history', { method: 'POST', body: JSON.stringify(payload) }),
+  clearChatbotHistory: (userId) =>
+    request(`/chatbot/history?userId=${encodeURIComponent(userId)}`, { method: 'DELETE' }),
+
   /* Scenarios */
   activateScenario: (id) => request(`/scenarios/${id}/activate`, { method: 'POST' }),
   deactivateScenario: () => request('/scenarios/deactivate', { method: 'POST' }),
@@ -85,4 +95,14 @@ export const api = {
     headers: { 'x-user-id': userId },
     body: JSON.stringify({ userId }),
   }),
+  /* Learning */
+  getLearningProgress: (userId) => request(`/learning/progress?userId=${encodeURIComponent(userId)}`),
+  updateLearningProgress: (payload) =>
+    request('/learning/progress', { method: 'PUT', body: JSON.stringify(payload) }),
+  markLearningSection: (payload) =>
+    request('/learning/lesson/section', { method: 'POST', body: JSON.stringify(payload) }),
+  saveQuizResult: (payload) =>
+    request('/learning/quiz/result', { method: 'POST', body: JSON.stringify(payload) }),
+  resetLearningProgress: (userId) =>
+    request('/learning/reset', { method: 'POST', body: JSON.stringify({ userId }) }),
 };

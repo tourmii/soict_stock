@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="First Lesson badge">
+  <defs><linearGradient id="g" x1="12" y1="10" x2="82" y2="88"><stop stop-color="#1B3BFC"/><stop offset="1" stop-color="#06B6D4"/></linearGradient></defs>
+  <circle cx="48" cy="48" r="42" fill="url(#g)"/>
+  <circle cx="48" cy="48" r="34" fill="#fff" opacity=".16"/>
+  <path d="M30 30h23c7 0 13 6 13 13v23H39c-5 0-9-4-9-9V30z" fill="#fff"/>
+  <path d="M39 40h18M39 49h18M39 58h11" stroke="#1B3BFC" stroke-width="5" stroke-linecap="round"/>
+  <path d="M65 29v38" stroke="#0F172A" stroke-opacity=".18" stroke-width="4"/>
+</svg>
