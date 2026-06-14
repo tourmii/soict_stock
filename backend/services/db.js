@@ -46,12 +46,21 @@ export async function connectDB() {
   await db.collection('leaderboard').createIndex({ portfolioValue: -1 });
   await db.collection('news').createIndex({ timestamp: -1 });
   await db.collection('users').createIndex({ email: 1 }, { unique: true });
+  await db.collection('users').createIndex({ display_name: 1 });
   await db.collection('blog_posts').createIndex({ slug: 1 }, { unique: true });
   await db.collection('blog_posts').createIndex({ status: 1 });
   await db.collection('blog_posts').createIndex({ author_id: 1 });
   await db.collection('blog_posts').createIndex({ published_at: -1 });
+  await db.collection('blog_posts').createIndex({ rating: -1 });
+  await db.collection('blog_posts').createIndex({ upvotes: -1 });
+  await db.collection('blog_posts').createIndex({ stock_tags: 1 });
   await db.collection('learning_progress').createIndex({ userId: 1 }, { unique: true });
   await db.collection('chatbot_conversations').createIndex({ userId: 1 }, { unique: true });
+
+  // Contest indexes
+  await db.collection('contests').createIndex({ status: 1 });
+  await db.collection('contest_portfolios').createIndex({ contestId: 1, userId: 1 }, { unique: true });
+  await db.collection('contest_portfolios').createIndex({ contestId: 1, portfolioValue: -1 });
 
   console.log(`✅ Connected to MongoDB: ${dbName}`);
   return db;

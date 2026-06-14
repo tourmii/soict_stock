@@ -1,5 +1,18 @@
-export default function LearningPathCard({ path, progress, quizzes = [], quizResults = {}, onContinue, onStartQuiz }) {
+export default function LearningPathCard({
+  path,
+  progress,
+  lessons = [],
+  quizzes = [],
+  lessonProgress = {},
+  quizResults = {},
+  onContinue,
+  onOpenLesson,
+  onStartQuiz,
+}) {
   const actionLabel = progress.percentage > 0 ? 'Continue' : 'Start';
+  const pathLessons = path.lessonIds
+    .map((lessonId) => lessons.find((lesson) => lesson.id === lessonId))
+    .filter(Boolean);
   const pathQuizzes = path.quizIds
     .map((quizId) => quizzes.find((quiz) => quiz.id === quizId))
     .filter(Boolean);
@@ -24,6 +37,24 @@ export default function LearningPathCard({ path, progress, quizzes = [], quizRes
       </div>
       <strong>{progress.percentage}% complete</strong>
       <p className="learning-path-card__outcome">{path.outcome}</p>
+      <div className="learning-path-card__checklist">
+        <h4>Path checklist</h4>
+        {pathLessons.map((lesson) => {
+          const completed = Boolean(lessonProgress[lesson.id]?.completed);
+          return (
+            <button
+              key={lesson.id}
+              type="button"
+              className={`learning-path-card__step ${completed ? 'learning-path-card__step--done' : ''}`}
+              onClick={() => onOpenLesson?.(lesson.id)}
+            >
+              <span className="learning-path-card__step-type">Lesson</span>
+              <span className="learning-path-card__step-title">{lesson.title}</span>
+              <em>{completed ? 'Done' : 'Open'}</em>
+            </button>
+          );
+        })}
+      </div>
       {pathQuizzes.length > 0 && (
         <div className="learning-path-card__quizzes">
           <h4>Required quizzes</h4>

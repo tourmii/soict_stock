@@ -13,13 +13,16 @@ export default function QuizModule({ quiz, onReviewLesson }) {
   const [saved, setSaved] = useState(false);
   const [answers, setAnswers] = useState([]);
   const [attemptSeed, setAttemptSeed] = useState(0);
+  const [reviewQuestions, setReviewQuestions] = useState(null);
 
+  const sourceQuestions = reviewQuestions || quiz.questions;
   const questions = useMemo(
-    () => quiz.questions.map((question, index) => shuffleQuestionOptions(question, index, attemptSeed)),
-    [quiz.questions, attemptSeed]
+    () => sourceQuestions.map((question, index) => shuffleQuestionOptions(question, index, attemptSeed)),
+    [sourceQuestions, attemptSeed]
   );
   const q = questions[currentQ];
   const passingScore = quiz.passingScore || 70;
+  const isReviewMode = Boolean(reviewQuestions);
 
   const handleSelect = (optionIndex) => {
     if (showExplanation) return;
@@ -34,6 +37,7 @@ export default function QuizModule({ quiz, onReviewLesson }) {
         selected: optionIndex,
         correct: q.correct,
         correctAnswer: q.options[q.correct],
+        sourceQuestion: q.sourceQuestion,
         isCorrect,
         explanation: q.explanation,
       },
@@ -41,33 +45,41 @@ export default function QuizModule({ quiz, onReviewLesson }) {
   };
 
   const handleNext = async () => {
-    if (currentQ < quiz.questions.length - 1) {
+    if (currentQ < questions.length - 1) {
       setCurrentQ((c) => c + 1);
       setSelected(null);
       setShowExplanation(false);
       return;
     }
     setFinished(true);
-    if (!saved) {
+    if (!saved && !isReviewMode) {
       setSaved(true);
-      await saveQuizResult(quiz.id, score, quiz.questions.length);
+      await saveQuizResult(quiz.id, score, questions.length);
     }
   };
 
-  const handleRetry = () => {
+  const resetAttempt = (nextReviewQuestions = null) => {
     setCurrentQ(0);
     setSelected(null);
     setShowExplanation(false);
     setScore(0);
     setFinished(false);
-    setSaved(false);
+    setSaved(Boolean(nextReviewQuestions));
     setAnswers([]);
+    setReviewQuestions(nextReviewQuestions);
     setAttemptSeed((seed) => seed + 1);
   };
 
+  const handleRetry = () => resetAttempt(null);
+  const handleRetryMissed = () => {
+    const missed = answers.filter((answer) => !answer.isCorrect).map((answer) => answer.sourceQuestion);
+    if (missed.length > 0) resetAttempt(missed);
+  };
+
   if (finished) {
-    const percentage = Math.round((score / quiz.questions.length) * 100);
+    const percentage = Math.round((score / questions.length) * 100);
     const passed = percentage >= passingScore;
+    const missedCount = answers.filter((answer) => !answer.isCorrect).length;
     const reviewLessons = (quiz.relatedLessonIds || [])
       .map((lessonId) => LESSONS.find((lesson) => lesson.id === lessonId))
       .filter(Boolean);
@@ -78,10 +90,10 @@ export default function QuizModule({ quiz, onReviewLesson }) {
           <span className="quiz-results__emoji">{passed ? 'Pass' : 'Review'}</span>
           <h4>{passed ? 'Quiz passed' : 'Quiz complete'}</h4>
           <p className="quiz-results__score">
-            You scored <strong>{score}/{quiz.questions.length}</strong> ({percentage}%)
+            You scored <strong>{score}/{questions.length}</strong> ({percentage}%)
           </p>
           <p className={`quiz-results__status ${passed ? 'quiz-results__status--pass' : 'quiz-results__status--fail'}`}>
-            {passed ? `Passed at ${passingScore}% threshold` : `Below ${passingScore}% passing threshold`}
+            {isReviewMode ? 'Focused review attempt' : passed ? `Passed at ${passingScore}% threshold` : `Below ${passingScore}% passing threshold`}
           </p>
           <div className="quiz-results__bar">
             <div className="quiz-results__bar-fill" style={{ width: `${percentage}%`, background: passed ? '#22C55E' : '#EF4444' }} />
@@ -115,9 +127,16 @@ export default function QuizModule({ quiz, onReviewLesson }) {
           ))}
         </div>
 
-        <button className="btn btn-primary" onClick={handleRetry} style={{ marginTop: '16px' }}>
-          Retry Quiz
-        </button>
+        <div className="quiz-results__actions">
+          {missedCount > 0 && (
+            <button className="btn btn-secondary" onClick={handleRetryMissed}>
+              Retry Missed Questions
+            </button>
+          )}
+          <button className="btn btn-primary" onClick={handleRetry}>
+            Retry Full Quiz
+          </button>
+        </div>
       </div>
     );
   }
@@ -128,10 +147,10 @@ export default function QuizModule({ quiz, onReviewLesson }) {
 
       <div className="quiz-module__progress">
         <div className="quiz-module__counter">
-          Question {currentQ + 1} of {quiz.questions.length}
+          {isReviewMode ? 'Review' : 'Question'} {currentQ + 1} of {questions.length}
         </div>
         <div className="quiz-module__bar">
-          <div className="quiz-module__bar-fill" style={{ width: `${((currentQ + (showExplanation ? 1 : 0)) / quiz.questions.length) * 100}%` }} />
+          <div className="quiz-module__bar-fill" style={{ width: `${((currentQ + (showExplanation ? 1 : 0)) / questions.length) * 100}%` }} />
         </div>
         <div className="quiz-module__score">Score: {score}</div>
       </div>
@@ -169,7 +188,7 @@ export default function QuizModule({ quiz, onReviewLesson }) {
 
       {showExplanation && (
         <button className="btn btn-primary quiz-next-btn" onClick={handleNext}>
-          {currentQ < quiz.questions.length - 1 ? 'Next Question' : 'See Results'}
+          {currentQ < questions.length - 1 ? 'Next Question' : 'See Results'}
         </button>
       )}
     </div>
@@ -198,6 +217,7 @@ function shuffleQuestionOptions(question, questionIndex = 0, attemptSeed = 0) {
 
   return {
     ...question,
+    sourceQuestion: question.sourceQuestion || question,
     options,
     correct: correctSlot,
   };

@@ -6,8 +6,11 @@ export default function LearningDashboard({
   averageQuizScore,
   earnedBadgeCount,
   recommendedLesson,
+  recommendedQuiz,
+  weakAreas = [],
   suggestedChallenge,
   onContinue,
+  onStartQuiz,
 }) {
   const stats = [
     { label: 'Lessons', value: completedLessons },
@@ -31,6 +34,23 @@ export default function LearningDashboard({
         <p className="learning-dashboard__next">
           Suggested next challenge: <strong>{suggestedChallenge || 'Complete a related quiz'}</strong>
         </p>
+        {recommendedQuiz && (
+          <div className="learning-dashboard__quiz-callout">
+            <span>Next path quiz</span>
+            <strong>{recommendedQuiz.title}</strong>
+            <button className="btn btn-secondary btn-sm" onClick={() => onStartQuiz?.(recommendedQuiz.id)}>Start Quiz</button>
+          </div>
+        )}
+        {weakAreas.length > 0 && (
+          <div className="learning-dashboard__weak-areas">
+            <span>Review focus</span>
+            {weakAreas.slice(0, 2).map((area) => (
+              <button key={area.quizId || area.category} type="button" onClick={() => area.quizId && onStartQuiz?.(area.quizId)}>
+                {area.category}
+              </button>
+            ))}
+          </div>
+        )}
         <p className="learning-dashboard__disclaimer">
           This learning module is for financial education in a simulated market environment. It does not provide real financial advice.
         </p>

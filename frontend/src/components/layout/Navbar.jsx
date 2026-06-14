@@ -26,6 +26,7 @@ export default function Navbar() {
     { path: '/blogs', label: 'Blogs' },
     { path: '/portfolio', label: 'Portfolio' },
     { path: '/leaderboard', label: 'Leaderboard' },
+    { path: '/contest', label: 'Contest' },
   ];
 
   return (

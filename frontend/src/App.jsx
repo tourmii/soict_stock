@@ -6,10 +6,12 @@ import Landing from './pages/Landing';
 import Simulation from './pages/Simulation';
 import Portfolio from './pages/Portfolio';
 import Leaderboard from './pages/Leaderboard';
+import Contest from './pages/Contest';
+import ContestArena from './pages/ContestArena';
 import Blogs from './pages/Blogs';
 import BlogDetail from './pages/BlogDetail';
-import MyBlogs from './pages/MyBlogs';
 import BlogEditor from './pages/BlogEditor';
+import UserProfile from './pages/UserProfile';
 
 import Learn from './pages/Learn';
 import Toast from './components/shared/Toast';
@@ -151,9 +153,12 @@ function App() {
           <Route path="/simulation" element={<Simulation />} />
           <Route path="/portfolio" element={<Portfolio />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
+          <Route path="/contest" element={<Contest />} />
+          <Route path="/contest/arena/:contestId" element={<ContestArena />} />
           <Route path="/blogs" element={<Blogs />} />
           <Route path="/blogs/:slug" element={<BlogDetail />} />
-          <Route path="/my-blogs" element={<MyBlogs />} />
+          <Route path="/profiles/:userId" element={<UserProfile />} />
+          <Route path="/my-blogs" element={user ? <Navigate to={`/profiles/${user.id}`} replace /> : <Navigate to="/blogs" replace />} />
           <Route path="/my-blogs/new" element={<BlogEditor />} />
           <Route path="/my-blogs/:id/edit" element={<BlogEditor />} />
           <Route path="/learn" element={<Learn />} />

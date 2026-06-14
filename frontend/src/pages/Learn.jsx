@@ -62,6 +62,8 @@ export default function Learn() {
   const recommendation = getRecommendedLesson(LESSONS, LEARNING_PATHS, portfolioContext);
   const recommendedLesson = recommendation.lesson;
   const recentQuiz = getRecentQuiz(quizResults);
+  const recommendedQuiz = getNextPathQuiz(currentLevel, LEARNING_PATHS, QUIZZES, quizResults);
+  const weakAreas = getWeakAreas(quizResults, QUIZZES);
   const suggestedTaskLesson = LESSONS.find((lesson) => lesson.practiceTask && !lessonProgress[lesson.id]?.completed) || recommendedLesson;
 
   const tabs = [
@@ -172,8 +174,11 @@ export default function Learn() {
               averageQuizScore={calculateAverageQuizScore()}
               earnedBadgeCount={earnedBadgeCount}
               recommendedLesson={recommendedLesson}
+              recommendedQuiz={recommendedQuiz}
+              weakAreas={weakAreas}
               suggestedChallenge={recommendedLesson?.relatedQuizId ? 'Pass the related quiz' : 'Complete a practice task'}
               onContinue={() => openLesson(recommendedLesson?.id || 'market-basics')}
+              onStartQuiz={openQuiz}
             />
 
             <div className="learn-overview__grid">
@@ -231,9 +236,12 @@ export default function Learn() {
                 key={path.id}
                 path={path}
                 progress={calculatePathProgress(path, lessonProgress, quizResults)}
+                lessons={LESSONS}
                 quizzes={QUIZZES}
+                lessonProgress={lessonProgress}
                 quizResults={quizResults}
                 onContinue={continuePath}
+                onOpenLesson={openLesson}
                 onStartQuiz={openQuiz}
               />
             ))}
@@ -269,6 +277,11 @@ export default function Learn() {
                 <button key={quiz.id} className="quiz-card card" onClick={() => setSelectedQuiz(quiz)}>
                   <div className="quiz-card__icon">{getQuizInitial(quiz)}</div>
                   <h4 className="quiz-card__title">{quiz.title}</h4>
+                  <div className="quiz-card__levels">
+                    {getQuizLevels(quiz.id, LEARNING_PATHS).map((level) => (
+                      <span key={level}>{level}</span>
+                    ))}
+                  </div>
                   <p className="quiz-card__meta">{quiz.questions.length} questions | {quiz.category}</p>
                   {result?.attempts?.length > 0 && (
                     <p className="quiz-card__meta">Best {result.bestScore}% | Last {result.lastScore}%</p>
@@ -331,6 +344,36 @@ function getRecentQuiz(quizResults) {
   if (!latest) return null;
   const quiz = QUIZZES.find((item) => item.id === latest.quizId);
   return { ...latest, title: quiz?.title || latest.quizId };
+}
+
+function getNextPathQuiz(currentLevel, paths, quizzes, quizResults) {
+  const currentPath = paths.find((item) => item.level === currentLevel);
+  const path = currentPath?.quizIds?.some((id) => !quizResults[id]?.completed)
+    ? currentPath
+    : paths.find((item) => item.quizIds.some((id) => !quizResults[id]?.completed));
+  const quizId = path?.quizIds?.find((id) => !quizResults[id]?.completed);
+  return quizzes.find((quiz) => quiz.id === quizId) || null;
+}
+
+function getQuizLevels(quizId, paths) {
+  return paths
+    .filter((path) => path.quizIds.includes(quizId))
+    .map((path) => path.level);
+}
+
+function getWeakAreas(quizResults, quizzes) {
+  return Object.entries(quizResults)
+    .map(([quizId, result]) => {
+      const quiz = quizzes.find((item) => item.id === quizId);
+      return {
+        quizId,
+        category: quiz?.category || quiz?.title || quizId,
+        lastScore: result?.lastScore ?? 100,
+        attempts: result?.attempts?.length || 0,
+      };
+    })
+    .filter((area) => area.attempts > 0 && area.lastScore < 70)
+    .sort((a, b) => a.lastScore - b.lastScore);
 }
 
 function getQuizInitial(quiz) {
