@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatDateTime } from '../lib/formatters';
 import { useAuthStore } from '../store/authStore';
@@ -46,6 +46,7 @@ function sortProfilePosts(posts, sort) {
 export default function UserProfile() {
   const { userId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const viewer = useAuthStore((s) => s.user);
   const addToast = useSettingsStore((s) => s.addToast);
   const [profile, setProfile] = useState(null);
@@ -134,7 +135,15 @@ export default function UserProfile() {
                 <h2>{profile.display_name || 'Trader'}</h2>
                 <p>{posts.length} {isMe ? '' : 'published '}{posts.length === 1 ? 'post' : 'posts'}</p>
               </div>
-              {isMe && <Link to="/my-blogs/new" className="btn btn-primary">New Post</Link>}
+              {isMe && (
+                <Link
+                  to="/my-blogs/new"
+                  state={{ from: `${location.pathname}${location.search}` }}
+                  className="btn btn-primary"
+                >
+                  New Post
+                </Link>
+              )}
             </div>
 
             <div className="blog-toolbar">

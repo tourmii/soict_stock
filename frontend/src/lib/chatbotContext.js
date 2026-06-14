@@ -21,6 +21,61 @@ function mentionedTicker(message = '') {
   return STOCKS.find((stock) => new RegExp(`\\b${stock.ticker}\\b`).test(upper))?.ticker || null;
 }
 
+function summarizeCandles(candles = []) {
+  if (!candles.length) return null;
+  const first = candles[0];
+  const last = candles[candles.length - 1];
+  const high = Math.max(...candles.map((candle) => Number(candle.high || candle.close || 0)));
+  const low = Math.min(...candles.map((candle) => Number(candle.low || candle.close || 0)));
+  const volume = candles.reduce((sum, candle) => sum + Number(candle.volume || 0), 0);
+  const start = Number(first.open || first.close || 0);
+  const end = Number(last.close || 0);
+
+  return {
+    bars: candles.length,
+    open: start,
+    close: end,
+    high,
+    low,
+    volume,
+    rangePercent: start > 0 ? ((high - low) / start) * 100 : 0,
+    returnPercent: start > 0 ? ((end - start) / start) * 100 : 0,
+  };
+}
+
+function buildStockSnapshot(market, prices = {}) {
+  return STOCKS.map((stock) => {
+    const price = prices[stock.ticker] ?? stock.basePrice;
+    const change = market.getChange?.(stock.ticker) || { change: 0, changePercent: 0 };
+    const dailyChange = market.getDailyChange?.(stock.ticker) || null;
+    return {
+      ticker: stock.ticker,
+      name: stock.name,
+      fullName: stock.fullName,
+      sector: stock.sector,
+      basePrice: stock.basePrice,
+      currentPrice: price,
+      volatility: stock.volatility,
+      drift: stock.drift,
+      change,
+      dailyChange,
+    };
+  });
+}
+
+function getTopMovers(stocks = []) {
+  return [...stocks]
+    .sort((a, b) => Math.abs(b.change?.changePercent || 0) - Math.abs(a.change?.changePercent || 0))
+    .slice(0, 5)
+    .map((stock) => ({
+      ticker: stock.ticker,
+      name: stock.name,
+      sector: stock.sector,
+      currentPrice: stock.currentPrice,
+      changePercent: stock.change?.changePercent || 0,
+    }));
+}
+
 export function buildChatbotContext(message = '') {
   const auth = useAuthStore.getState();
   const market = useMarketStore.getState();
@@ -28,10 +83,13 @@ export function buildChatbotContext(message = '') {
   const orders = useOrderStore.getState();
   const portfolio = usePortfolioStore.getState();
   const learning = useLearningStore.getState();
-  const ticker = mentionedTicker(message) || market.selectedTicker;
+  const explicitTicker = mentionedTicker(message);
+  const ticker = explicitTicker || market.selectedTicker;
   const stock = STOCKS.find((item) => item.ticker === ticker);
   const prices = market.prices || {};
   const change = market.getChange?.(ticker) || { change: 0, changePercent: 0 };
+  const ohlcv = market.getOHLCV?.(ticker, '1H')?.slice(-30) || [];
+  const stockSnapshot = buildStockSnapshot(market, prices);
   const holdingsArray = portfolio.getHoldingsArray?.(prices) || [];
   const portfolioValue = portfolio.getPortfolioValue?.(prices) || portfolio.cash || 0;
   const sectorAllocation = getSectorAllocation(portfolio.holdings, prices, STOCKS);
@@ -53,12 +111,19 @@ export function buildChatbotContext(message = '') {
     market: {
       selectedTicker: market.selectedTicker,
       mentionedTicker: ticker,
+      explicitMentionedTicker: explicitTicker,
       stock,
-      stocks: STOCKS,
+      stocks: stockSnapshot,
+      sectorPeers: stockSnapshot.filter((item) => item.sector === stock?.sector && item.ticker !== ticker),
+      topMovers: getTopMovers(stockSnapshot),
+      highVolatilityStocks: stockSnapshot
+        .filter((item) => item.volatility >= 0.03)
+        .map((item) => ({ ticker: item.ticker, name: item.name, sector: item.sector, volatility: item.volatility })),
       prices,
       prevPrices: market.prevPrices,
       change,
-      ohlcv: market.getOHLCV?.(ticker, '1H')?.slice(-30) || [],
+      ohlcv,
+      ohlcvSummary: summarizeCandles(ohlcv),
     },
     news: {
       newsItems: latestNews,

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
 import { STOCKS } from '../lib/constants';
 import { formatDateTime } from '../lib/formatters';
@@ -60,6 +60,7 @@ function stockFilterFromSearch(search) {
 export default function Blogs() {
   const user = useAuthStore((s) => s.user);
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const [posts, setPosts] = useState([]);
   const [sort, setSort] = useState('time');
@@ -119,7 +120,15 @@ export default function Blogs() {
             <h2>Market Notes and Trading Reflections</h2>
             <p>{DISCLAIMER}</p>
           </div>
-          {user && <Link to="/my-blogs/new" className="btn btn-primary">Write a Post</Link>}
+          {user && (
+            <Link
+              to="/my-blogs/new"
+              state={{ from: `${location.pathname}${location.search}` }}
+              className="btn btn-primary"
+            >
+              Write a Post
+            </Link>
+          )}
         </div>
 
         <div className="blog-toolbar">
@@ -195,7 +204,7 @@ export default function Blogs() {
         )}
 
         <div className="blog-grid">
-          {posts.map((post) => {
+          {posts.map((post, index) => {
             const isMine = user?.id && post.author_id === user.id;
             const openPost = () => navigate(`/blogs/${post.slug}`);
 
@@ -203,6 +212,7 @@ export default function Blogs() {
             <article
               key={post.id}
               className="blog-card blog-card--clickable"
+              style={{ '--blog-card-delay': `${Math.min(index, 8) * 55}ms` }}
               role="link"
               tabIndex={0}
               onClick={openPost}
