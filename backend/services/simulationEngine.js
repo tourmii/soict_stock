@@ -25,10 +25,10 @@
 import { getDb } from './db.js';
 import { STOCKS } from './stockData.js';
 
-/* ── Constants ──────────────────────────────────────────────── */
-const BAR_SEC      = 300;            // 5-minute bars
-const HISTORY_DAYS = 365;            // 1 calendar year of stored bars
-const YEAR_SEC     = 365 * 24 * 3600; // eslint-disable-line no-unused-vars
+/* ── Constants ──────────────────────────────────── */
+const BAR_SEC      = 300;           // 5-minute bars
+const HISTORY_DAYS = 30;            // 30 days of stored bars (safe for Atlas 512MB free tier)
+const YEAR_SEC     = 365 * 24 * 3600;
 const DT_BAR       = 1 / (252 * 78); // fraction of trading year per 5-min bar
 // Calibrated so each stock's 24h σ ≈ vol × √(28800/90000):
 //   low-vol  (0.017) → ~1.0% / day
