@@ -38,36 +38,20 @@ The purpose of SoictStock is to help users learn stock market concepts through a
 
 ## 2.3 Main Use Cases
 
-### 2.3.1 Guest Use Cases
-* View landing page.
-* Browse public blog posts.
-* Sign up.
-* Verify email (added).
-* Sign in.
-
-### 2.3.2 Registered User Use Cases
-* View market dashboard.
-* View stock chart and quote.
-* Place an order.
-* Execute buy/sell trade.
-* Cancel an open order.
-* Open leveraged position (added).
-* Close leveraged position (added).
-* View portfolio, risk metrics, and transaction history.
-* View leaderboard.
-* Join contest and trade in contest arena.
-* Read lessons, complete sections, and take quizzes.
-* Use market analysis lab and pattern game.
-* Ask chatbot.
-* Create, update, publish, archive, and delete own blog posts.
-* Vote and comment on published blog posts.
-
-### 2.3.3 Simulation Engine Use Cases
-* Generate historical price bars.
-* Broadcast real-time price ticks.
-* Apply market regimes and scenarios.
-* Update current quotes.
-* Check margin liquidations (added).
+| No. | Code | Use case | Description | Actor |
+|---|---|---|---|---|
+| 1 | UC-01 | Create blog | Create a new blog draft, edit content, publish, archive, or delete. | Blog Author |
+| 2 | UC-02 | Verify email | Verify the newly created account via an email link before signing in. | Guest |
+| 3 | UC-03 | Sign up / Sign in | Register a new account or log in to an existing account. | Guest |
+| 4 | UC-04 | View market | View market dashboard, stock list, stock quotes, and historical price charts. | Registered User |
+| 5 | UC-05 | Trade stock | Place orders, execute buy/sell trades, open/close leverage positions, and cancel open orders. | Registered User |
+| 6 | UC-06 | View portfolio | View cash balance, current holdings, transaction history, and risk metrics. | Registered User |
+| 7 | UC-07 | View leaderboard | View general platform leaderboard and see user rankings based on portfolio performance. | Registered User |
+| 8 | UC-08 | Learn lesson | View learning paths, read lesson content, and mark sections as completed. | Registered User |
+| 9 | UC-09 | Take quiz | Answer and submit quizzes related to learning paths and view scores. | Registered User |
+| 10 | UC-10 | Join contest | View active contests, join a contest, and trade in a contest-specific portfolio arena. | Contest Participant |
+| 11 | UC-11 | Ask chatbot | Ask educational questions about the platform, trading concepts, and risk. | Registered User |
+| 12 | UC-12 | Manage market scenario | Trigger predefined market scenarios such as crisis or inflation to affect simulation prices. | Platform Maintainer |
 
 ## 2.4 Use Case Diagrams
 
@@ -255,47 +239,89 @@ contestant -- UC_ConLead
 
 ## 2.5 Use Case Specifications
 
-### 2.5.1 UC-01: Sign Up
+### 2.5.1 UC-01: Create blog
+* **Actor**: Blog Author
+* **Precondition**: The user is signed in and navigated to the blog management page.
+* **Main flow**: The author creates a new draft, edits the title and content, and saves it. The author then chooses to publish the post. The system updates the post status and makes it visible on the public blog page.
+* **Alternative flow**: If the content is empty or invalid, the system displays a validation error. If the user does not have permission, the action is rejected.
+* **Postcondition**: The blog post is created, stored, and appropriately visible based on its status (draft/published).
+
+### 2.5.2 UC-02: Verify email
 * **Actor**: Guest
-* **Precondition**: The visitor has not signed in.
-* **Main flow**: The guest opens the authentication modal, enters email, password, and display name. The backend validates the input, hashes the password, creates a user record (unverified), and initializes a portfolio with virtual cash. The system sends a verification email.
-* **Alternative flow**: If the email already exists or the password is invalid, the system returns an error message.
-* **Postcondition**: A new unverified account and default portfolio are created.
+* **Precondition**: The guest has successfully submitted the sign-up form but has not verified their email yet.
+* **Main flow**: The user clicks the verification link sent to their email. The system validates the token. The system updates the user record to mark the email as verified. The system displays a success message allowing the user to sign in.
+* **Alternative flow**: If the token is invalid or expired, the system returns an error message and prompts the user to request a new verification email.
+* **Postcondition**: The user's account is verified and ready for sign in.
 
-### 2.5.2 UC-02: Execute Buy/Sell Trade
-* **Actor**: Registered user
-* **Precondition**: The user is signed in and the selected ticker exists in the simulated market.
-* **Main flow**: The user selects a ticker, chooses buy or sell, enters quantity, and submits the trade. The backend reads the current simulated price, validates cash or holdings, updates portfolio, records the transaction, and updates the leaderboard.
-* **Alternative flow**: If cash is insufficient, holdings are insufficient, or the ticker is unknown, the trade is rejected.
-* **Postcondition**: Portfolio, transaction history, and leaderboard are updated after a successful trade.
+### 2.5.3 UC-03: Sign up / Sign in
+* **Actor**: Guest
+* **Precondition**: The visitor is on the landing page or authentication modal.
+* **Main flow**: For sign-up, the guest enters email, password, and display name. The system hashes the password, creates a user record, and initializes a default portfolio with virtual cash. For sign-in, the guest enters their credentials. The system authenticates the user and establishes a session.
+* **Alternative flow**: If the email already exists during sign-up, or if credentials are wrong during sign-in, the system displays an error message. If the email is unverified during sign-in, access is denied.
+* **Postcondition**: A new account is created (sign-up), or the user is authenticated and logged into the platform (sign-in).
 
-### 2.5.3 UC-03: Stream Real-time Prices
-* **Actor**: Simulation engine
-* **Precondition**: Backend server and WebSocket server are running.
-* **Main flow**: The engine initializes historical prices, starts a tick loop, updates prices every few seconds, stores ticks, and broadcasts updates to connected frontend clients. Engine also regularly checks for margin liquidation on leveraged positions.
-* **Alternative flow**: If the WebSocket connection is unavailable, the frontend may fall back to local simulation to keep the user interface responsive.
-* **Postcondition**: The market dashboard receives current prices without refreshing the page, and under-margined accounts are liquidated.
+### 2.5.4 UC-04: View market
+* **Actor**: Registered User
+* **Precondition**: The user is signed in.
+* **Main flow**: The user navigates to the market dashboard. The system displays a list of simulated stocks. The user clicks on a specific stock to view its detailed chart, historical prices, and current quotes updated in real-time via WebSocket.
+* **Alternative flow**: If the WebSocket connection is lost, the frontend falls back to local simulation to ensure prices still visually update.
+* **Postcondition**: The user observes real-time and historical market data successfully.
 
-### 2.5.4 UC-04: Complete Quiz
-* **Actor**: Registered user
-* **Precondition**: The user opens a lesson or quiz in the learning center.
-* **Main flow**: The user answers quiz questions and submits the quiz. The system calculates the score, saves the quiz result, updates progress, and displays feedback.
-* **Alternative flow**: If the user is not signed in, progress may not be persisted.
-* **Postcondition**: Learning progress and quiz result are stored for the user.
+### 2.5.5 UC-05: Trade stock
+* **Actor**: Registered User
+* **Precondition**: The user is signed in and is viewing the simulation dashboard.
+* **Main flow**: The user selects a stock ticker and chooses to buy, sell, or place an order. The user inputs the quantity. The system validates the current simulated price against the user's available cash or stock holdings. The system executes the trade, updates the user's portfolio cash and holdings, and records a transaction log.
+* **Alternative flow**: If the user lacks sufficient virtual cash for a buy, or sufficient shares for a sell, the system rejects the trade and shows an error toast.
+* **Postcondition**: The user's portfolio and transaction history are updated to reflect the completed trade.
 
-### 2.5.5 UC-05: Publish Blog Post
-* **Actor**: Blog author
-* **Precondition**: The user is signed in and has created a draft post.
-* **Main flow**: The author edits the title and content, saves the draft, and publishes the post. The system changes the post status to published and makes it visible on the public blog page.
-* **Alternative flow**: If the user is not the owner of the post, the update, archive, publish, or delete request is rejected.
-* **Postcondition**: The post is visible to public readers if it is published.
+### 2.5.6 UC-06: View portfolio
+* **Actor**: Registered User
+* **Precondition**: The user is signed in.
+* **Main flow**: The user navigates to the portfolio page. The system calculates and displays the current cash balance, the list of current stock holdings, the total portfolio value, realized and unrealized profit/loss, and a chart showing risk metrics and transaction history.
+* **Alternative flow**: If the user has not made any trades yet, the portfolio simply shows the initial cash balance and an empty holdings list.
+* **Postcondition**: The user has full visibility into their portfolio's financial health and performance.
 
-### 2.5.6 UC-06: Ask Chatbot
-* **Actor**: Registered user
-* **Precondition**: The chatbot widget is available.
-* **Main flow**: The user enters a question. The chatbot service detects intent, applies safety rules, uses platform and learning context, returns an educational response, and saves the message history.
-* **Alternative flow**: If the user asks for real investment advice, the chatbot responds with an educational disclaimer and avoids a direct buy/sell recommendation.
-* **Postcondition**: The user receives guidance, and the chat history is updated.
+### 2.5.7 UC-07: View leaderboard
+* **Actor**: Registered User
+* **Precondition**: The user is signed in.
+* **Main flow**: The user opens the leaderboard page. The system aggregates portfolio values from all active users, sorts them by highest performance, and displays a ranked list. The user can see their own rank relative to others.
+* **Alternative flow**: If the leaderboard data is temporarily unavailable, the system displays a loading state or a cached version of the rankings.
+* **Postcondition**: The user's relative standing in the simulation is presented.
+
+### 2.5.8 UC-08: Learn lesson
+* **Actor**: Registered User
+* **Precondition**: The user is signed in and navigates to the learning center.
+* **Main flow**: The user browses available learning paths and selects a lesson. The user reads the educational material and marks sections as completed. The system tracks the user's learning progress and saves it to the database.
+* **Alternative flow**: If the user loses network connection, progress tracking may fail to save immediately and will retry.
+* **Postcondition**: The user's learning progress is updated and visually indicated in the learning dashboard.
+
+### 2.5.9 UC-09: Take quiz
+* **Actor**: Registered User
+* **Precondition**: The user is signed in and has accessed a lesson containing a quiz.
+* **Main flow**: The user answers the multiple-choice questions in the quiz and submits their answers. The system grades the submission, calculates the score, and saves the quiz result. The system displays immediate feedback showing correct and incorrect answers.
+* **Alternative flow**: If the user submits the quiz with unanswered questions, the system may prompt them to complete all questions before grading.
+* **Postcondition**: The user's quiz attempt and score are persistently stored.
+
+### 2.5.10 UC-10: Join contest
+* **Actor**: Contest Participant
+* **Precondition**: The user is signed in and there is an active contest running.
+* **Main flow**: The user views active contests and clicks join. The system initializes a separate, contest-specific portfolio with a predefined starting cash balance. The user navigates to the contest arena to trade specifically within the rules and allowed tickers of that contest.
+* **Alternative flow**: If the contest has already ended or is full, the system prevents the user from joining and displays a relevant message.
+* **Postcondition**: The user becomes a participant in the contest with an isolated contest portfolio.
+
+### 2.5.11 UC-11: Ask chatbot
+* **Actor**: Registered User
+* **Precondition**: The user is signed in and the chatbot widget is enabled.
+* **Main flow**: The user opens the chatbot panel and types a question regarding trading concepts or platform usage. The chatbot service processes the intent, incorporates current market/portfolio context, and returns an educational response along with relevant suggestion cards.
+* **Alternative flow**: If the user asks for real-world financial advice, the chatbot detects the unsafe intent and responds with a strict disclaimer stating that it only provides simulated educational guidance.
+* **Postcondition**: The chatbot's response is displayed to the user and the conversation history is saved.
+
+### 2.5.12 UC-12: Manage market scenario
+* **Actor**: Platform Maintainer
+* **Precondition**: The maintainer has appropriate access to trigger administrative market actions.
+* **Main flow**: The maintainer selects a predefined market scenario (e.g., tech bubble, market crash, or inflation) and activates it. The simulation engine adjusts price drift, volatility, and momentum parameters globally. The engine broadcasts the scenario change, affecting real-time prices for all users.
+* **Alternative flow**: The maintainer decides to deactivate an ongoing scenario, returning the market to normal baseline behavior.
+* **Postcondition**: The market simulation globally adopts the new pricing behavior dictated by the active scenario.
 
 ## 2.6 Functional Requirements
 
