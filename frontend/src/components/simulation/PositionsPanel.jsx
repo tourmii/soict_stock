@@ -1,6 +1,10 @@
+import { useEffect } from 'react';
 import { useMarketStore } from '../../store/marketStore';
 import { usePortfolioStore } from '../../store/portfolioStore';
 import { useOrderStore } from '../../store/orderStore';
+import { useLeverageStore } from '../../store/leverageStore';
+import { useAuthStore } from '../../store/authStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import { STOCKS } from '../../lib/constants';
 import { formatCurrency } from '../../lib/formatters';
 
@@ -12,8 +16,38 @@ export default function PositionsPanel() {
   const getPortfolioValue = usePortfolioStore((s) => s.getPortfolioValue);
   const getTotalReturn = usePortfolioStore((s) => s.getTotalReturn);
   const transactions = usePortfolioStore((s) => s.transactions);
+  const loadPortfolio = usePortfolioStore((s) => s.loadFromBackend);
   const openOrders = useOrderStore((s) => s.openOrders);
   const cancelOrder = useOrderStore((s) => s.cancelOrder);
+  const user = useAuthStore((s) => s.user);
+  const addToast = useSettingsStore((s) => s.addToast);
+  const positions = useLeverageStore((s) => s.positions);
+  const fetchPositions = useLeverageStore((s) => s.fetchPositions);
+  const closePosition = useLeverageStore((s) => s.closePosition);
+  const isClosing = useLeverageStore((s) => s.isLoading);
+
+  useEffect(() => {
+    if (user) fetchPositions(user.id, null);
+  }, [user?.id]);
+
+  // Live P&L for leveraged (futures) positions in the non-contest simulator
+  const levPositions = positions
+    .filter((p) => !p.contestId && p.status === 'Open')
+    .map((p) => {
+      const cur = prices[p.ticker] || p.entryPrice;
+      const pnl = (cur - p.entryPrice) * p.quantity * (p.side === 'Long' ? 1 : -1);
+      return { ...p, currentPrice: cur, unrealizedPnL: pnl };
+    });
+
+  const handleClose = async (p) => {
+    const res = await closePosition(user?.id, p._id.toString(), null);
+    if (res.success) {
+      addToast({ type: 'trade', title: 'Position Closed', message: `${p.ticker} · P&L ${formatCurrency(res.pnl)}` });
+      await loadPortfolio(prices); // reflect returned margin in cash
+    } else {
+      addToast({ type: 'error', title: 'Close failed', message: res.message });
+    }
+  };
 
   const holdings = getHoldingsArray(prices);
   const portfolioValue = getPortfolioValue(prices);
@@ -84,6 +118,49 @@ export default function PositionsPanel() {
             );
           })}
         </div>
+      )}
+
+      {/* Leveraged (futures) positions */}
+      {levPositions.length > 0 && (
+        <>
+          <div className="positions-section-header">Futures Positions</div>
+          <div className="lev-positions-list">
+            {levPositions.map((p) => {
+              const pnlClass = p.unrealizedPnL >= 0 ? 'price-up' : 'price-down';
+              const pnlPct = p.margin > 0 ? (p.unrealizedPnL / p.margin) * 100 : 0;
+              return (
+                <div key={p._id} className="lev-position-row">
+                  <div className="lev-pos-head">
+                    <div className="lev-pos-sym">
+                      <span
+                        className="trade-ticker"
+                        style={{ cursor: 'pointer' }}
+                        onClick={() => setSelectedTicker(p.ticker)}
+                      >{p.ticker}</span>
+                      <span className={`lev-badge ${p.side === 'Long' ? 'long' : 'short'}`}>
+                        {p.leverage}× {p.side}
+                      </span>
+                    </div>
+                    <span className={pnlClass} style={{ fontWeight: 700 }}>
+                      {p.unrealizedPnL >= 0 ? '+' : ''}{formatCurrency(p.unrealizedPnL)}
+                      <span className="pct-small"> ({pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%)</span>
+                    </span>
+                  </div>
+                  <div className="lev-pos-meta">
+                    <span>Entry {formatCurrency(p.entryPrice)}</span>
+                    <span>Mark {formatCurrency(p.currentPrice)}</span>
+                    <span className="price-down">Liq {formatCurrency(p.liquidationPrice)}</span>
+                  </div>
+                  <button
+                    className="lev-close-btn"
+                    disabled={isClosing}
+                    onClick={() => handleClose(p)}
+                  >Close Position</button>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* Open orders */}

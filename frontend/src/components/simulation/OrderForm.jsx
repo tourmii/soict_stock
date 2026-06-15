@@ -22,6 +22,7 @@ export default function OrderForm() {
   const addToast = useSettingsStore((s) => s.addToast);
   const user = useAuthStore((s) => s.user);
   const openPosition = useLeverageStore((s) => s.openPosition);
+  const loadPortfolio = usePortfolioStore((s) => s.loadFromBackend);
 
   const [mode, setMode] = useState('regular');
   const [side, setSide] = useState('Buy');
@@ -107,6 +108,7 @@ export default function OrderForm() {
     if (res.success) {
       addToast({ type: 'trade', title: 'Position Opened', message: `${leverage}× ${direction} ${quantity} ${ticker}` });
       setQuantity(1);
+      await loadPortfolio(prices); // reflect margin deduction in cash
     } else {
       addToast({ type: 'error', title: 'Failed', message: res.message });
     }

@@ -937,6 +937,64 @@
 .trade-qty    { color: var(--gray-500); font-size: 10px; }
 .trade-total  { font-weight: 600; text-align: right; font-size: 11px; }
 
+/* ── Futures (leveraged) positions ─────────────────────────────── */
+.lev-positions-list {
+  overflow-y: auto;
+  flex-shrink: 0;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lev-position-row {
+  border: 1px solid var(--gray-100);
+  border-radius: var(--radius-md, 6px);
+  padding: 8px 10px;
+  background: var(--gray-50);
+}
+
+.lev-pos-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.lev-pos-sym { display: flex; align-items: center; gap: 6px; }
+
+.lev-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+}
+.lev-badge.long  { background: rgba(37, 99, 235, 0.12);  color: #2563EB; }
+.lev-badge.short { background: rgba(220, 38, 38, 0.12);  color: #DC2626; }
+
+.lev-pos-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--gray-500);
+  margin-bottom: 7px;
+}
+
+.lev-close-btn {
+  width: 100%;
+  padding: 5px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm, 4px);
+  background: white;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gray-600);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.lev-close-btn:hover:not(:disabled) { background: var(--gray-50); }
+.lev-close-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* ── Top Bar ───────────────────────────────────────────────────── */
 .topbar {
   background: var(--white);
