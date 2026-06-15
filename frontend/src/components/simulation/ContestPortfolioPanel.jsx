@@ -60,11 +60,13 @@ export default function ContestPortfolioPanel() {
         <div style={{marginTop:'12px',fontSize:'var(--text-xs)',color:'var(--gray-500)'}}>
           Cash: <strong style={{color:'var(--text-primary)'}}>{formatCurrency(cash)}</strong>
         </div>
-        {holdings.filter(h=>h.shares>0).length > 0 && (() => {
-          const totalUnrealized = holdings.filter(h=>h.shares>0).reduce((sum, h) => {
+        {(holdings.filter(h=>h.shares>0).length > 0 || livePositions.length > 0) && (() => {
+          const stockUnrealized = holdings.filter(h=>h.shares>0).reduce((sum, h) => {
             const cur = prices[h.ticker] || h.avgPrice || 0;
             return sum + (cur - h.avgPrice) * h.shares;
           }, 0);
+          const futuresUnrealized = livePositions.reduce((sum, p) => sum + p.unrealizedPnL, 0);
+          const totalUnrealized = stockUnrealized + futuresUnrealized;
           return (
             <div style={{marginTop:'4px',fontSize:'var(--text-xs)',color:'var(--gray-500)'}}>
               Unrealized P&L: <strong style={{color: totalUnrealized >= 0 ? 'var(--green)' : 'var(--red)'}}>

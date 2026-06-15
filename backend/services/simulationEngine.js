@@ -181,6 +181,39 @@ export class SimulationEngine {
     return Math.max(0.50, price);
   }
 
+  /* ─── Intrabar high/low (candle wicks) ────────────────────────
+   * Reconstructs the bar's high & low from a Brownian-bridge path that is
+   * pinned to the bar's open and close. Because the path is pinned, the
+   * wicks come out naturally ASYMMETRIC and direction-aware:
+   *   • up-bars (close > open) tend to dip first → longer LOWER wick, and
+   *     close near the high → short upper wick;
+   *   • down-bars do the opposite.
+   * Wick size scales with the bar's real volatility, so a large-body bar
+   * no longer sprouts an oversized symmetric wick. `microVol` adds a little
+   * intrabar microstructure noise that the 5-min close smooths away. */
+  _barWicks(open, close, sigmaBar, steps = 10, microVol = 1.5) {
+    const L       = Math.log(close / open);          // bridge endpoint (net log-return)
+    const stepSig = (sigmaBar * microVol) / Math.sqrt(steps);
+
+    // Free random walk, then bend it into a bridge that lands exactly on L.
+    const X = new Array(steps + 1);
+    X[0] = 0;
+    for (let i = 1; i <= steps; i++) X[i] = X[i - 1] + stepSig * randn();
+
+    let hiLog = Math.max(0, L);  // always bracket both open (0) and close (L)
+    let loLog = Math.min(0, L);
+    for (let i = 1; i < steps; i++) {
+      const y = X[i] - (i / steps) * (X[steps] - L); // Brownian-bridge value at step i
+      if (y > hiLog) hiLog = y;
+      if (y < loLog) loLog = y;
+    }
+
+    return {
+      high: Math.round(open * Math.exp(hiLog) * 100) / 100,
+      low:  Math.max(0.50, Math.round(open * Math.exp(loLog) * 100) / 100),
+    };
+  }
+
   /* ─── 5-minute bar generator ─────────────────────────────── */
   /*
    * Three-component drift for each bar:
@@ -235,12 +268,8 @@ export class SimulationEngine {
       price = this._softClamp(price, stock);
       const barClose = Math.round(price * 100) / 100;
 
-      // Natural wicks: extend body by a random fraction of bar vol
-      const bodyHigh = Math.max(barOpen, barClose);
-      const bodyLow  = Math.min(barOpen, barClose);
-      const wickExt  = stock.volatility * barClose * 0.10;
-      const high = Math.round((bodyHigh + Math.abs(randn()) * wickExt) * 100) / 100;
-      const low  = Math.max(0.50, Math.round((bodyLow  - Math.abs(randn()) * wickExt) * 100) / 100);
+      // Direction-aware wicks reconstructed from a pinned intrabar path
+      const { high, low } = this._barWicks(barOpen, barClose, barSigma);
 
       ticks.push({
         ticker: stock.ticker,

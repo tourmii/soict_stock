@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { INITIAL_CASH } from '../lib/constants';
 import { api } from '../lib/api';
 import { useAuthStore } from './authStore';
+import { useLeverageStore } from './leverageStore';
 
 export const usePortfolioStore = create((set, get) => ({
     cash: INITIAL_CASH,
@@ -132,7 +133,27 @@ export const usePortfolioStore = create((set, get) => ({
         }
     },
 
-    /* Calculate portfolio value */
+    /* Open non-contest futures positions with live P&L and equity.
+       Margin was deducted from cash on open, so each position is worth
+       max(0, margin + unrealizedPnL) — adding that back avoids double-count. */
+    getFuturesPositions: (prices = {}) => {
+        const positions = useLeverageStore.getState().positions || [];
+        return positions
+            .filter((p) => !p.contestId && p.status === 'Open')
+            .map((p) => {
+                const currentPrice = prices[p.ticker] || p.entryPrice;
+                const unrealizedPnL = (currentPrice - p.entryPrice) * p.quantity * (p.side === 'Long' ? 1 : -1);
+                return { ...p, currentPrice, unrealizedPnL, equity: Math.max(0, p.margin + unrealizedPnL) };
+            });
+    },
+
+    getFuturesEquity: (prices = {}) =>
+        get().getFuturesPositions(prices).reduce((sum, p) => sum + p.equity, 0),
+
+    getFuturesUnrealizedPL: (prices = {}) =>
+        get().getFuturesPositions(prices).reduce((sum, p) => sum + p.unrealizedPnL, 0),
+
+    /* Calculate portfolio value (cash + market holdings + open futures equity) */
     getPortfolioValue: (prices = {}) => {
         const { cash, holdings } = get();
         let stockValue = 0;
@@ -141,10 +162,10 @@ export const usePortfolioStore = create((set, get) => ({
                 stockValue += holding.shares * (prices[ticker] || holding.avgPrice || 0);
             }
         }
-        return cash + stockValue;
+        return cash + stockValue + get().getFuturesEquity(prices);
     },
 
-    /* Get unrealized P&L */
+    /* Get unrealized P&L (market holdings + open futures) */
     getUnrealizedPL: (prices) => {
         const { holdings } = get();
         let total = 0;
@@ -153,7 +174,7 @@ export const usePortfolioStore = create((set, get) => ({
                 total += (prices[ticker] - holding.avgPrice) * holding.shares;
             }
         }
-        return total;
+        return total + get().getFuturesUnrealizedPL(prices);
     },
 
     /* Get realized P&L */
@@ -204,9 +225,11 @@ export const usePortfolioStore = create((set, get) => ({
         const totalValue = get().getPortfolioValue(prices);
 
         const stockValue = holdingsArr.reduce((sum, h) => sum + h.marketValue, 0);
+        const futuresValue = get().getFuturesEquity(prices);
         return {
             stocks: totalValue > 0 ? (stockValue / totalValue) * 100 : 0,
             cash: totalValue > 0 ? (cash / totalValue) * 100 : 100,
+            futures: totalValue > 0 ? (futuresValue / totalValue) * 100 : 0,
             etfs: 0,
             other: 0,
         };

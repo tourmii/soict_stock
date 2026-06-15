@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../services/db.js';
 import { STOCKS } from '../services/stockData.js';
 import { ObjectId } from 'mongodb';
+import { futuresEquity } from '../services/valuation.js';
 
 const router = Router();
 const INITIAL_CONTEST_CASH = 100000;
@@ -284,6 +285,13 @@ router.get('/portfolio', async (req, res) => {
         });
       }
     }
+
+    // Open contest futures positions count toward total value (margin + unrealized PnL)
+    const positions = await db.collection('leveraged_positions')
+      .find({ userId, status: 'Open', contestId })
+      .toArray();
+    totalValue += futuresEquity(positions, engine.prices);
+
     res.json({ cash: portfolio.cash, totalValue, initialCash: portfolio.initialCash, holdings: holdingsArr });
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -369,11 +377,20 @@ router.get('/leaderboard', async (req, res) => {
   const db = getDb();
   try {
     const portfolios = await db.collection('contest_portfolios').find({ contestId }).toArray();
+
+    // Open contest futures positions, grouped by user, count toward each value
+    const positions = await db.collection('leveraged_positions')
+      .find({ contestId, status: 'Open' })
+      .toArray();
+    const posByUser = {};
+    for (const p of positions) (posByUser[p.userId] ||= []).push(p);
+
     const lb = portfolios.map(p => {
       let totalValue = p.cash;
       for (const [ticker, h] of Object.entries(p.holdings || {})) {
         if (h.shares > 0) totalValue += h.shares * (engine.prices[ticker] || 0);
       }
+      totalValue += futuresEquity(posByUser[p.userId] || [], engine.prices);
       return { userId: p.userId, portfolioValue: totalValue, returnPct: ((totalValue - p.initialCash) / p.initialCash) * 100 };
     });
     lb.sort((a, b) => b.portfolioValue - a.portfolioValue);

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { getDb } from '../services/db.js';
+import { positionEquity, updateLeaderboard } from '../services/valuation.js';
 
 const router = Router();
 const INITIAL_CASH = 150000;
@@ -30,6 +31,18 @@ router.get('/', async (req, res) => {
       }
     }
 
+    // Open futures positions count toward total value (margin + unrealized PnL)
+    const positions = await db.collection('leveraged_positions')
+      .find({ userId, status: 'Open', contestId: null })
+      .toArray();
+    const leveragedPositions = positions.map((p) => {
+      const currentPrice = engine.prices[p.ticker] ?? p.entryPrice;
+      const unrealizedPnL = (currentPrice - p.entryPrice) * p.quantity * (p.side === 'Long' ? 1 : -1);
+      const equity = positionEquity(p, engine.prices);
+      totalValue += equity;
+      return { ...p, currentPrice, unrealizedPnL, equity };
+    });
+
     const transactions = await db.collection('transactions')
       .find({ userId })
       .sort({ createdAt: -1 })
@@ -41,6 +54,7 @@ router.get('/', async (req, res) => {
       totalValue,
       initialCash: portfolio.initialCash || INITIAL_CASH,
       holdings: holdingsArr,
+      leveragedPositions,
       transactions,
     });
   } catch (err) {
@@ -111,22 +125,10 @@ router.post('/trade', async (req, res) => {
     };
     await db.collection('transactions').insertOne(tx);
 
-    // Update leaderboard
+    // Update leaderboard (value includes market holdings + open futures equity)
+    await updateLeaderboard(db, engine, userId);
+
     const updatedPortfolio = await db.collection('portfolios').findOne({ userId });
-    let totalValue = updatedPortfolio.cash;
-    for (const [t, h] of Object.entries(updatedPortfolio.holdings || {})) {
-      if (h.shares > 0) totalValue += h.shares * (engine.prices[t] || 0);
-    }
-    const totalReturn = ((totalValue - (updatedPortfolio.initialCash || INITIAL_CASH)) / (updatedPortfolio.initialCash || INITIAL_CASH)) * 100;
-    const txCount = await db.collection('transactions').countDocuments({ userId });
-
-    const userDoc = await db.collection('users').findOne({ _id: userId }, { projection: { display_name: 1 } });
-    await db.collection('leaderboard').updateOne(
-      { userId },
-      { $set: { userId, displayName: userDoc?.display_name || userId, portfolioValue: totalValue, totalReturn, trades: txCount, updatedAt: new Date().toISOString() } },
-      { upsert: true }
-    );
-
     res.json({ success: true, transaction: tx, cash: updatedPortfolio.cash, holdings: updatedPortfolio.holdings });
   } catch (err) {
     res.status(500).json({ message: err.message });
