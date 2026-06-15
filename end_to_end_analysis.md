@@ -1,132 +1,140 @@
 # Báo Cáo Phân Tích Chuyên Sâu End-to-End
 ## Component: Market Simulation & Streaming và News & Scenario
 
-Tài liệu này cung cấp một cái nhìn **vô cùng chi tiết và toàn diện** về quy trình Kỹ nghệ phần mềm (Software Engineering) đã được áp dụng để xây dựng 2 thành phần cốt lõi nhất của dự án SoictStock. Phân tích đi sâu vào toán học, kiến trúc, và từng dòng logic quan trọng trong mã nguồn, giúp bạn hoàn toàn làm chủ kiến thức để bảo vệ trước hội đồng.
+Tài liệu này cung cấp một cái nhìn **vô cùng chi tiết và toàn diện** về quy trình Kỹ nghệ phần mềm (Software Engineering) đã được áp dụng để xây dựng 2 thành phần cốt lõi nhất của dự án SoictStock. Phân tích đi sâu vào toán học, kiến trúc, và **giải thích tường tận từng file code** đã được định nghĩa trong kiến trúc.
 
 ---
 
 # PHẦN 1: MARKET SIMULATION & STREAMING (MÔ PHỎNG VÀ TRUYỀN PHÁT GIÁ)
 
-Đây là "trái tim" của toàn bộ hệ thống SoictStock, chịu trách nhiệm biến một trang web vô tri thành một sàn giao dịch ảo sống động.
+## 1.1 Quy trình End-to-End: Từ Yêu cầu (SRS) $\rightarrow$ Thiết kế $\rightarrow$ Lập trình
 
-## Bước 1: Từ Đặc tả yêu cầu phần mềm (SRS)
+**Bước 1: Từ Đặc tả yêu cầu phần mềm (SRS)**
+*   **Mục tiêu (Purpose):** Hệ thống cần một môi trường giả lập giá cổ phiếu thật nhất có thể để người dùng thực hành, loại bỏ rủi ro tài chính nhưng vẫn giữ nguyên cảm giác "nhịp đập" của thị trường.
+*   **Use Case cốt lõi:** **UC-04: View Market:** Người dùng đăng nhập $\rightarrow$ Mở bảng điều khiển $\rightarrow$ Thấy danh sách mã chứng khoán (Tickers) $\rightarrow$ Xem biểu đồ nến lịch sử $\rightarrow$ Nhìn thấy giá nhảy múa từng giây (Real-time update) mà không cần tải lại trang.
+*   **Yêu cầu chức năng (FR-02):** `FR-MKT-1` (Duy trì list cổ phiếu ảo), `FR-MKT-2` (Tự động sinh nến lịch sử), `FR-MKT-3` (Truyền phát dữ liệu qua WebSocket).
 
-Mọi thứ bắt đầu từ việc định nghĩa bài toán trong tài liệu SRS (Chương 2):
+**Bước 2: Thiết kế hệ thống (System Design)**
+*   **Chiến lược lưu trữ dữ liệu:** Không lưu mọi mức giá tick 3-giây vào DB vì sẽ làm sập server. Chỉ lưu lại **nến 5-phút (5-minute bars)**. Collection `ticks` trong MongoDB chỉ chứa các document nến OHLCV. Giá trị nhấp nháy mỗi 3 giây được giữ **hoàn toàn trên RAM (In-memory)**.
+*   **Kiến trúc Lớp BCE:**
+    *   *Entity:* `Stock`, `Tick`.
+    *   *Control:* `SimulationEngine` (lõi sinh giá), `PriceStream` (truyền phát qua WebSocket), `MarketStore` (Zustand hứng dữ liệu ở Client).
+    *   *Boundary:* `SimulationPage`, `StockChart`, `Watchlist`, `TickerHeader`, `MarketLoadingOverlay`.
 
-1.  **Mục tiêu (Purpose):** Hệ thống cần một môi trường giả lập giá cổ phiếu thật nhất có thể để người dùng thực hành, loại bỏ rủi ro tài chính nhưng vẫn giữ nguyên cảm giác "nhịp đập" của thị trường.
-2.  **Use Case cốt lõi:**
-    *   **UC-04: View Market:** Người dùng đăng nhập $\rightarrow$ Mở bảng điều khiển $\rightarrow$ Thấy danh sách mã chứng khoán (Tickers) $\rightarrow$ Xem biểu đồ nến lịch sử $\rightarrow$ Nhìn thấy giá nhảy múa từng giây (Real-time update) mà không cần tải lại trang.
-    *   **Alternative Flow của UC-04:** Nếu mất mạng (WebSocket đứt), giao diện phải tự động chuyển sang chế độ "mô phỏng cục bộ" (fallback) để đồ thị không bị đứng im, duy trì ảo giác liên tục cho người học.
-3.  **Yêu cầu chức năng (Functional Requirements - FR-02):**
-    *   `FR-MKT-1`: Duy trì danh sách cổ phiếu ảo (vd: SCT, HEAL).
-    *   `FR-MKT-2`: Hệ thống phải **tự động sinh ra các thanh nến (bars)** lịch sử trong quá khứ.
-    *   `FR-MKT-3`: Truyền phát (Stream) dữ liệu giá cập nhật theo thời gian thực qua giao thức **WebSocket**.
+**Bước 3: Lập trình mã nguồn (Implementation)**
+Dưới đây là phần giải thích chi tiết toàn bộ các file code tham gia vào luồng hoạt động này, chia theo Backend và Frontend.
 
-## Bước 2: Thiết kế hệ thống (System Design)
+---
 
-Để thoả mãn các yêu cầu khắt khe trên (đặc biệt là FR-MKT-2 và FR-MKT-3) mà không làm sập server do cạn kiệt tài nguyên, kiến trúc được thiết kế như sau (Dựa theo **Figure 3.2: BCE Analysis Diagram** và **Figure 4.6** trong báo cáo):
+## 1.2 Giải thích chi tiết các file Code - Phía Backend (Tạo giá và truyền phát)
 
-### 2.1 Chiến lược lưu trữ dữ liệu (Database Design)
-Nếu một ngày có hàng triệu lượt thay đổi giá (tick) mà ghi tất cả vào Database thì MongoDB sẽ nhanh chóng sập. 
-*   **Giải pháp:** Chỉ lưu lại **nến 5-phút (5-minute bars)**. Collection `ticks` trong MongoDB chỉ chứa các document có cấu trúc: `ticker`, `time` (mốc 5 phút), `open`, `high`, `low`, `price` (close), và `volume`.
-*   Giá trị nhấp nháy mỗi 3 giây được giữ **hoàn toàn trên RAM (In-memory)** của Backend và ném thẳng qua WebSocket xuống Client. Cứ hết 300 giây (5 phút), Backend mới gộp các giá trên RAM lại thành 1 cây nến và ghi (Insert) vào DB 1 lần duy nhất.
+### 1. `backend/services/simulationEngine.js`
+Đây là "trái tim" của toàn bộ hệ thống, chứa động cơ toán học sinh giá. 
+*   Nó tự động chạy ngầm trên Server, dùng vòng lặp thời gian (`setInterval` mỗi 3 giây) để liên tục cộng/trừ giá thông qua hàm `tick()`. 
+*   **Thuật toán định giá:** Áp dụng phương trình **Merton Jump-Diffusion** kết hợp 4 lớp vật lý:
+    1.  *Geometric Brownian Motion (GBM):* Lõi cơ bản tính `log-return` dựa trên `drift` và `volatility`.
+    2.  *Merton Jumps:* Bơm các cú sốc ngẫu nhiên (phân phối Poisson).
+    3.  *Quán tính (Momentum Follow-through):* Thuật toán nhớ hướng đi của giá. Nếu có cú sập > 2.5 lần độ lệch chuẩn, Engine sẽ bơm thêm hệ số `activeDrift` cùng chiều trong vài nhịp tiếp theo để giá "trôi" tiếp tạo trend.
+    4.  *Hồi quy giá trị trung bình (Ornstein-Uhlenbeck Mean Reversion):* Một lực kéo hãm phanh lại nếu giá đi quá xa so với `basePrice`, đảm bảo đồ thị không trôi dạt vào vô tận.
+*   **Thuật toán nặn bóng nến (Brownian Bridge):** Hàm `_barWicks()`. Thay vì random bóng nến (high/low) vô lý, Engine vẽ hàng chục bước random walk vi mô từ Open đến Close. Nếu nến Đóng > Mở (nến xanh), thuật toán thường ép ra bóng dưới dài tạo hình thái nến cực chuẩn.
+*   Cứ hết 5 phút, file này sẽ gộp các giá trên RAM lại thành 1 cây nến và ghi (Insert) vào Database.
 
-### 2.2 Kiến trúc Lớp BCE (Boundary - Control - Entity)
-*   **Entity (Thực thể):** `Stock` (Cổ phiếu ảo với các thông số vật lý như `drift`, `volatility`), `Tick` (Bản ghi nến 5-phút).
-*   **Control (Điều khiển):** 
-    *   `SimulationEngine`: Khối động cơ toán học. Tự động chạy ngầm trên Server, dùng vòng lặp thời gian để liên tục cộng/trừ giá.
-    *   `PriceStream`: Trạm thu phát sóng WebSocket. Nhận giá từ Engine và phát cho Client.
-    *   `MarketStore` (Phía Client): Kho hứng dữ liệu, nhào nặn lại mảng nến.
-*   **Boundary (Giao diện):** `SimulationPage` (Trang chính), `StockChart` (Khung vẽ biểu đồ).
+### 2. `backend/services/stockData.js`
+Nơi lưu trữ cấu hình tĩnh (Static config). File này định nghĩa mảng danh sách 30 mã cổ phiếu ảo ban đầu (ví dụ SCT, HEAL). Nó chứa các thông số vật lý gốc cho từng mã: mã (ticker), tên công ty, lĩnh vực, giá cơ sở (basePrice), độ lệch chuẩn (volatility) và xu hướng (drift). `simulationEngine.js` sẽ đọc file này để khởi tạo thị trường.
 
-### 2.3 Luồng tuần tự (Sequence Diagram - Figure 3.7)
-*   Khởi động: Khi backend chạy, nó kiểm tra DB. Nếu DB trống, nó chạy lệnh `_generateHistory()` lùi thời gian về 30 ngày trước, tính toán hàng chục ngàn cây nến 5-phút và Insert ồ ạt vào DB. Lỗ hổng này giải thích màn hình **"Building Market History"**.
-*   Real-time: Server mở vòng lặp (setInterval) 3 giây một lần $\rightarrow$ `SimulationEngine` tính ra giá mới $\rightarrow$ Gọi hàm callback đẩy vào `PriceStream` $\rightarrow$ Phát qua WebSocket $\rightarrow$ Client nhận và vẽ lên Chart.
+### 3. `backend/websocket/priceStream.js`
+Trạm thu phát sóng. Khởi tạo Server WebSocket. File này lắng nghe sự kiện `engine.onTick()` từ `simulationEngine.js`. Khi có mức giá mới nhất được tính ra, nó sẽ sử dụng hàm `client.send()` để liên tục "bắn" (broadcast) một cục dữ liệu JSON chứa giá mới về phía các trình duyệt Client đang mở web.
 
-## Bước 3: Lập trình mã nguồn chi tiết (Implementation)
+### 4. `backend/routes/market.js`
+Cung cấp các API REST (Ví dụ `GET /api/market/history`). Trong khi `priceStream.js` lo dữ liệu nhấp nháy hiện tại, thì file route này giúp Frontend gọi lên xin dữ liệu các cây nến lịch sử trong 30 ngày quá khứ để vẽ ra cái nền tảng biểu đồ ban đầu khi user mới tải trang.
 
-Đây là nơi lý thuyết biến thành các dòng code thực tế cực kỳ tinh vi:
+> [!NOTE] 
+> **Kết luận Backend Market Simulation:** 
+> Backend đóng vai trò là "Nhà cái" (Market Maker). Nó thiết lập các định luật vật lý siêu thực cho cổ phiếu (thông qua `simulationEngine.js`), lưu trữ lịch sử (`market.js`), và đóng vai trò phát thanh viên thời gian thực (`priceStream.js`).
 
-### 3.1 Khối Backend
-**File `backend/services/simulationEngine.js`**
-Đây là một kiệt tác về mô phỏng tài chính. Thuật toán định giá không dùng hàm `Math.random()` đơn thuần, mà dùng phương trình **Merton Jump-Diffusion** kết hợp 4 lớp vật lý:
-1.  **Geometric Brownian Motion (GBM):** Lõi cơ bản. Hàm `_mertonStep()` tính toán lợi suất logarit (log-return) dựa trên Xu hướng dài hạn (`drift`) và Độ nhiễu (`volatility`).
-2.  **Merton Jumps (Cú sốc phân phối Poisson):** Mô phỏng việc thỉnh thoảng có tin giật gân làm giá sập hoặc tăng sốc. Tần suất xảy ra (lambda) tuân theo phân phối Poisson.
-3.  **Quán tính (Momentum Follow-through):** Cực kỳ tinh tế. Thuật toán nhớ hướng đi của giá. Nếu có cú sập > 2.5 lần độ lệch chuẩn, Engine sẽ bơm thêm hệ số `activeDrift` cùng chiều trong vài nhịp tiếp theo để giá "trôi" tiếp (tạo thành một trend rớt giá tự nhiên) thay vì chỉ giật 1 nến rồi quay lại quỹ đạo cũ.
-4.  **Hồi quy giá trị trung bình (Ornstein-Uhlenbeck Mean Reversion):** Nếu giá chạy quá xa so với `basePrice` gốc, một lực kéo `meanRevDrift = -MEAN_REV_SPEED * ln(price / basePrice)` sẽ hãm phanh lại. Giá càng đi xa, lực kéo về càng mạnh, đảm bảo đồ thị không trôi dạt vào vô tận.
-5.  **Cầu Brownian (Brownian Bridge) nặn bóng nến:** Hàm `_barWicks()`. Thay vì random bóng nến (high/low) vô lý, Engine vẽ hàng chục bước random walk vi mô từ Open đến Close. Kết quả là nếu nến Đóng > Mở (nến xanh), thuật toán thường ép ra bóng dưới dài (do giá phải nhúng xuống tạo đáy rồi bật lên). Điều này tạo ra hình thái nến cực chuẩn theo lý thuyết nến Nhật!
+---
 
-**File `backend/websocket/priceStream.js`**
-*   Lắng nghe sự kiện `engine.onTick((updates) => {...})`. 
-*   Khi có giá mới, nó duyệt qua danh sách các thiết bị đang kết nối qua thư viện `ws` và gọi `client.send()` để đẩy Object chứa cục dữ liệu giá mới nhất.
+## 1.3 Giải thích chi tiết các file Code - Phía Frontend (Nhận giá và vẽ biểu đồ)
 
-### 3.2 Khối Frontend
-**File `frontend/src/store/marketStore.js`**
-*   Quản lý toàn bộ state thị trường bằng `Zustand`.
-*   Khởi tạo `new WebSocket()`. Khi nhận message `tick`, nó chạy logic **nặn nến**. Nếu nhịp tick này vẫn nằm trong chu kỳ 5 phút hiện tại, nó đè (update) vào cây nến cuối cùng (cập nhật High, Low, Close). Nếu vừa qua phút thứ 5, nó đóng nến cũ và mở một Object nến OHLCV mới toanh.
-*   Cơ chế **Fallback cực hay**: Nếu `socket.onclose` kích hoạt (mất mạng), Store bật một `setInterval` ở local, tự động dùng `Math.random` nội suy để giá vẫn nhảy trên UI, không làm gián đoạn trải nghiệm người học.
+### 1. `frontend/src/store/marketStore.js`
+Kho chứa State (quản lý bằng Zustand). 
+*   Nó làm nhiệm vụ kết nối tới WebSocket của Backend. 
+*   Khi nhận luồng giá real-time từ Server, nó lưu trữ lại vào biến `rawTicks`, chạy logic **nặn nến** (gộp các tick thành OHLCV) và kích hoạt re-render để báo cho các file giao diện biết cập nhật màn hình.
+*   Nó có cơ chế **Fallback**: Nếu mất mạng, Store tự động dùng `Math.random` nội suy để giá vẫn nhảy cục bộ trên UI.
 
-**File `frontend/src/components/simulation/StockChart.jsx`**
-*   Sử dụng thư viện (như Lightweight Charts) để ánh xạ mảng dữ liệu OHLCV từ `marketStore` thành biểu đồ trực quan. 
-*   Quản lý các sự kiện thay đổi khung thời gian (Timeframe) và vẽ các đường chỉ báo kỹ thuật (Technical Indicators).
+### 2. `frontend/src/pages/Simulation.jsx`
+Màn hình chính của phòng giao dịch. Đây là khung (layout) tổng bọc toàn bộ các tính năng biểu đồ, bảng giá, đặt lệnh. File này đóng vai trò Container kết nối các Component con lại với nhau.
 
-> **KẾT LUẬN CỦA COMPONENT MARKET SIMULATION:**
-> *   **Về Backend:** Giải quyết bài toán **Tạo sinh dữ liệu (Data Generation)** cực khó bằng mô hình toán học tài chính cao cấp (Merton, GBM, Momentum), đảm bảo tính chân thực tuyệt đối mà không cần phụ thuộc sàn thật. Giải quyết bài toán hiệu năng bằng thiết kế lưu trữ nến gộp 5-phút thông minh.
-> *   **Về Frontend:** Giải quyết bài toán **Đồng bộ trạng thái thời gian thực (Real-time State Synchronization)**. Nhận dữ liệu stream với tốc độ cao, bóc tách và render lại hàng trăm cây nến lên giao diện mượt mà (60fps) mà không gây giật lag trình duyệt.
+### 3. `frontend/src/components/simulation/StockChart.jsx`
+File code đảm nhiệm việc vẽ biểu đồ Nến Nhật. Nhận mảng dữ liệu nến lịch sử và nến real-time từ `marketStore.js`, sử dụng thư viện (như Lightweight Charts) để ánh xạ mảng dữ liệu OHLCV thành biểu đồ trực quan có thể tương tác (zoom, pan).
+
+### 4. `frontend/src/components/simulation/Watchlist.jsx`
+Bảng danh sách các mã cổ phiếu ở bên trái màn hình. Nó lắng nghe biến động giá từ `marketStore.js` để cập nhật các đường mini-chart (sparklines) và chớp xanh/đỏ mỗi khi có giá mới của toàn bộ thị trường.
+
+### 5. `frontend/src/components/simulation/TickerHeader.jsx`
+Header nằm ngay trên biểu đồ. Chỉ hiển thị dòng chữ to: Giá hiện tại và tỷ lệ % tăng/giảm trong ngày của mã cổ phiếu đang xem, có hiệu ứng đổi màu Flash xanh/đỏ khi giá tick.
+
+### 6. `frontend/src/components/simulation/MarketLoadingOverlay.jsx`
+Giao diện Loading "Building Market History" hiện lên khi chờ Backend sinh giá. Lúc mới khởi động (First Run), Backend cần tính toán 1 năm nến lịch sử nên sẽ mất vài giây. File này hiển thị vòng xoay quay quay che màn hình để báo cáo tiến độ, tránh user nhìn thấy biểu đồ trống trơn.
+
+> [!NOTE] 
+> **Kết luận Frontend Market Simulation:** 
+> Frontend đóng vai trò là "Thiết bị đầu cuối" (Trading Terminal). Nó thuần tuý thụ động lắng nghe dữ liệu từ Backend (`marketStore`), xử lý logic đồ hoạ mượt mà (`StockChart`) và cung cấp trải nghiệm UX trực quan (`Watchlist`, `TickerHeader`, `MarketLoadingOverlay`).
 
 ---
 
 # PHẦN 2: NEWS & SCENARIO (TIN TỨC & KỊCH BẢN THỊ TRƯỜNG)
 
-Nếu Market Simulation là "Thân xác" vật lý, thì News & Scenario chính là "Linh hồn" tạo ra các chấn động tâm lý học cho thị trường ảo, đem lại giá trị sư phạm cốt lõi.
+## 2.1 Quy trình End-to-End: Từ Yêu cầu (SRS) $\rightarrow$ Thiết kế $\rightarrow$ Lập trình
 
-## Bước 1: Từ Đặc tả yêu cầu phần mềm (SRS)
+**Bước 1: Từ Đặc tả yêu cầu phần mềm (SRS)**
+*   **Mục tiêu:** Hệ thống cần dạy người học cách thị trường phản ứng với tin tức vĩ mô thay vì chỉ giao dịch mù quáng. Cần tạo ra các sự kiện kinh tế hoặc kịch bản vĩ mô tác động làm giá cổ phiếu nhảy vọt hoặc sập mạnh.
+*   **Use Case cốt lõi:** **UC-12: Manage market scenario** (kích hoạt kịch bản). Yêu cầu FR-MKT-5 (Hỗ trợ Market scenarios and regimes).
 
-1.  **Mục tiêu:** Hệ thống cần dạy người học cách thị trường phản ứng với tin tức vĩ mô (vd: FED tăng lãi suất, công ty phá sản) thay vì chỉ giao dịch mù quáng theo kỹ thuật.
-2.  **Yêu cầu chức năng (FR-MKT-5 & FR-SOC):**
-    *   Hỗ trợ kích hoạt các kịch bản thị trường (Market Scenarios).
-    *   Bơm tin tức vĩ mô vào hệ thống để tác động lên giá cổ phiếu (News shocks).
-3.  **Sự kiện:** Gồm 2 loại: **Ngắn hạn** (News - 1 bản tin ra lò làm giật giá cục bộ) và **Dài hạn** (Scenarios - Kịch bản thay đổi môi trường kéo dài nhiều tuần).
+**Bước 2: Thiết kế hệ thống (System Design)**
+*   **Dữ liệu:** Collection `news` lưu bản tin kèm `sentiment` (tích cực/tiêu cực), `impact` (độ sốc) và `affectedTickers`.
+*   **Luồng hoạt động:** Thiết kế theo mô hình **Sự kiện Tác động**. Cần một tiến trình chạy ngầm (Background Job) định kỳ thu thập tin tức, sau đó tiêm (inject) tin tức này vào Engine sinh giá để tạo ra cú shock.
 
-## Bước 2: Thiết kế hệ thống (System Design)
+**Bước 3: Lập trình mã nguồn (Implementation)**
+Dưới đây là phần giải thích chi tiết toàn bộ các file code tham gia vào luồng hoạt động này.
 
-### 2.1 Thiết kế Cơ sở dữ liệu (ERD - Figure 3.10)
-*   **Collection `news`**: Gồm các trường cốt lõi: `headline` (Tựa đề tin), `sentiment` (Chỉ số cảm xúc: Positive/Negative), `affectedTickers` (Danh sách mã bị dính đòn), `impact` (Cường độ mạnh/nhẹ của tin tức).
-*   **Scenarios**: Không lưu trong DB dưới dạng cấu hình tĩnh mà là các thông số Runtime (ghi đè trực tiếp trên RAM của Engine sinh giá).
+---
 
-### 2.2 Kiến trúc Lớp (BCE & Control Logic)
-Thành phần này được thiết kế theo mô hình **Sự kiện Tác động (Event-driven Mutation)**:
-*   `NewsInjector` (Service) đóng vai trò thợ săn tin. Nó đẩy dữ liệu vào Database (`news`), đồng thời gọi hàm can thiệp thẳng vào `SimulationEngine`.
-*   `SimulationEngine` có sẵn các hàm public như `applyShock()` hoặc `setRegime()` để nhận lệnh thay đổi thông số.
+## 2.2 Giải thích chi tiết các file Code - Phía Backend (Tạo tin tức và áp dụng độ giật giá)
 
-## Bước 3: Lập trình mã nguồn chi tiết (Implementation)
+### 1. `backend/services/newsService.js`
+Dịch vụ quản lý kho tin tức. Chứa logic sinh ra các bản tin (News) ngẫu nhiên (nếu không có API Key) hoặc cào từ API bên thứ 3 (GNews, Marketaux). Quản lý danh sách tin tức đang diễn ra. Nó phân tích tiêu đề (Headline) để tìm xem Ticker nào xuất hiện để xếp vào mảng `affectedTickers`.
 
-### 3.1 Khối Backend
-**File `backend/services/newsService.js`**
-*   Làm nhiệm vụ cào (fetch) tin tức từ API bên ngoài (GNews, Marketaux). 
-*   Nếu không có API Key, nó tự động fallback sang cơ chế **Sinh tin ảo** từ các khuôn mẫu (Templates) có sẵn. Dù là thật hay ảo, nó đều phải chạy qua khâu phân tích cú pháp (Parser) để tìm xem Ticker nào xuất hiện trong tiêu đề để xếp vào mảng `affectedTickers`.
+### 2. `backend/services/newsInjector.js`
+"Kẻ thao túng thị trường". File này đóng vai trò như một "Chiếc bơm". Nó liên tục canh thời gian (setInterval), khi có tin tức mới xuất hiện, nó lấy tin từ `newsService.js`, phân tích xem tin này là Tốt hay Xấu. Sau đó nó sẽ gọi hàm `applyShock()` được public từ bên trong `simulationEngine.js` để giật giá cổ phiếu (pump hoặc dump) tương ứng với độ tốt/xấu của bản tin.
+*Đặc biệt: Hàm applyShock không chỉ ép giá xuống, mà đẩy biến `volCluster` (Cụm độ biến động GARCH) lên cực cao, làm thân nến sau tin tức dao động dữ dội mô phỏng sự hoảng loạn của đám đông.*
 
-**File `backend/services/newsInjector.js`**
-*   *Động cơ chi phối giá (Market Manipulator)*: Khởi tạo một `setInterval` định kỳ (ví dụ mỗi giờ mô phỏng). Nó sẽ móc một tin tức từ `newsService`.
-*   Phân tích `sentiment`: Nếu tin tức là Tốt (Positive), nó gọi `simulationEngine.applyShock(ticker, +0.05)` (tăng giá 5%). Nếu Xấu, nó truyền số âm.
-*   **Mối liên hệ tuyệt đỉnh với `simulationEngine`:** Khi hàm `applyShock()` được kích hoạt trong Engine, nó không chỉ cộng giá! Nó đẩy biến `volCluster` (Cụm độ biến động GARCH) lên cực cao. Có nghĩa là sau tin tức, biểu đồ không chỉ rớt giá, mà thân nến còn dao động và rung lắc cực kỳ mạnh, phản ánh chính xác sự hoảng loạn của tâm lý đám đông trong thực tế.
+### 3. `backend/routes/news.js`
+Các API (REST) đơn giản để Frontend lấy danh sách tin tức hiển thị lên bảng tin (Ví dụ `GET /api/news`).
 
-**File `backend/routes/scenarios.js`**
-*   Cung cấp API cho Admin, ví dụ `POST /api/scenarios/tech_bubble/activate`. 
-*   Khi kích hoạt, API này gọi `simulationEngine.setRegime('tech_bubble', { driftOverrides: { Tech: +0.02 }, volMultipliers: { Tech: 1.5 } })`. Ngay lập tức, thuật toán Toán học ở Phần 1 sẽ thay thế số `drift` tĩnh bằng biến số mới này, khiến các mã công nghệ tăng giá phi mã và liên tục phá đỉnh cho đến khi Admin tắt kịch bản.
+### 4. `backend/routes/scenarios.js`
+API nhận lệnh điều khiển kịch bản từ Admin. (Ví dụ: Chuyển toàn thị trường sang kịch bản Bull Market, Bear Market, hoặc Lạm phát). Khi kích hoạt, API này gọi hàm `setRegime()` trong `simulationEngine.js` để ghi đè hệ số `drift` (tăng trưởng) của nhóm ngành lên cực cao/thấp, làm giá cả nhóm ngành thay đổi xu hướng trong nhiều ngày liên tiếp.
 
-### 3.2 Khối Frontend
-**File `frontend/src/store/newsStore.js`**
-*   Trạng thái cục bộ lưu trữ mảng tin tức. Có cơ chế tự động loại bỏ tin cũ, chèn tin mới lên đầu.
+> [!NOTE] 
+> **Kết luận Backend News & Scenario:** 
+> Đây là "Động cơ sự kiện" (Event Engine) của hệ thống. Nhờ việc cô lập lõi toán học ở `simulationEngine.js`, cụm `newsInjector.js` và `scenarios.js` có thể dễ dàng "kết nối" (hook) vào Engine để bóp méo thông số đầu vào ở thời gian thực theo logic kinh tế (tin tốt lên, tin xấu xuống), đem lại giá trị giáo dục.
 
-**File `frontend/src/components/simulation/NewsPanel.jsx`**
-*   Một cửa sổ trượt (Scrolling feed) nằm trên giao diện Simulation.
-*   Cơ chế UX: Khi Store ghi nhận có phần tử tin tức mới nhất vừa được thêm vào mảng, UI Component này bắt được tín hiệu thay đổi state $\rightarrow$ tự động kích hoạt một hiệu ứng CSS nhấp nháy (Flash animation đỏ hoặc xanh lá) và cuộn màn hình lên trên cùng.
-*   **Trải nghiệm người học:** User đang nhìn biểu đồ bỗng thấy biểu đồ rớt thê thảm. Mắt họ liếc sang NewsPanel thấy đang chớp đỏ dòng tin "Công ty XYZ phá sản". Ngay lập tức sự kết nối nhân quả hình thành trong não bộ người học!
+---
 
-**File `frontend/src/components/shared/NewsModal.jsx` & `ScenarioSelector.jsx`**
-*   Modal cho phép đọc chi tiết tin. Selector (dạng Dropdown) để tự chỉnh kịch bản vĩ mô theo ý muốn (dành cho chế độ thực hành đặc biệt).
+## 2.3 Giải thích chi tiết các file Code - Phía Frontend (Hiển thị tin tức và điều khiển kịch bản)
 
-> **KẾT LUẬN CỦA COMPONENT NEWS & SCENARIO:**
-> *   **Về Backend:** Đây là thành quả tuyệt vời của thiết kế mô-đun (Modularity). Nhờ việc cô lập lõi toán học ở `SimulationEngine`, cụm `NewsInjector` và `Scenarios` có thể dễ dàng "kết nối" (hook) vào Engine để bóp méo thông số đầu vào (Drift, Volatility, Price) ở thời gian thực mà không làm vỡ cấu trúc code.
-> *   **Về Frontend:** Tạo ra một "Lớp lang bối cảnh" (Contextual Overlay). Bằng cách kết nối UI của Bảng tin với những cú sốc hiển thị trên Biểu đồ, Frontend đã thành công trong việc mô phỏng lại một môi trường áp lực cao của các phòng giao dịch (Trading floor) chuyên nghiệp, nâng tầm ứng dụng từ một trò chơi điện tử thành một công cụ sư phạm tài chính thực thụ.
+### 1. `frontend/src/store/newsStore.js`
+Kho trạng thái (Zustand) lưu trữ mảng danh sách các bài báo hiện tại đang có trên thị trường ở phía client. Nó liên tục cập nhật/chèn tin mới lên đầu khi có tin bài mới từ Backend gửi về.
+
+### 2. `frontend/src/components/simulation/NewsPanel.jsx`
+Khung cửa sổ hiển thị danh sách các tin tức (thường nằm ở bên dưới hoặc bên phải màn hình Simulation). Đây là một Scrolling feed. Khi có tin mới từ `newsStore.js`, danh sách này sẽ tự động cuộn (scroll) và chớp sáng màu đỏ/xanh lá để cảnh báo người chơi rằng thị trường đang có biến.
+
+### 3. `frontend/src/components/shared/NewsModal.jsx`
+Khi user bấm vào một mẩu tin trong `NewsPanel`, Modal này sẽ bật lên để hiển thị chi tiết toàn văn bài viết báo chí ảo, giúp người dùng đọc và hiểu lý do vì sao giá lại sập trên biểu đồ.
+
+### 4. `frontend/src/components/simulation/ScenarioSelector.jsx`
+File giao diện chứa các nút bấm (dạng Dropdown, dành cho Admin hoặc chế độ luyện tập đặc biệt) để chủ động chọn và kích hoạt một kịch bản thị trường cụ thể. Khi bấm, nó sẽ gọi API lên `backend/routes/scenarios.js` để tác động hệ thống.
+
+> [!NOTE] 
+> **Kết luận Frontend News & Scenario:** 
+> Frontend ở phần này đóng vai trò "Bảng thông tin bối cảnh" (Context UI). Bằng cách kết hợp giữa sự kiện nhấp nháy trên `NewsPanel.jsx` và sự sụp đổ của biểu đồ `StockChart.jsx`, Frontend tạo ra cầu nối nhận thức trực quan cho người học, diễn giải cho người dùng hiểu: "Tại sao biểu đồ lại sập?".
