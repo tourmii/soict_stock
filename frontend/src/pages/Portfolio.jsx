@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useMarketStore } from '../store/marketStore';
 import { usePortfolioStore } from '../store/portfolioStore';
+import { useLeverageStore } from '../store/leverageStore';
+import { useAuthStore } from '../store/authStore';
 import { STOCKS } from '../lib/constants';
 import { formatCurrency, formatPercentRaw, formatDateTime } from '../lib/formatters';
 import StatCard from '../components/shared/StatCard';
@@ -25,6 +27,11 @@ export default function Portfolio() {
   const getAllocation = usePortfolioStore((s) => s.getAllocation);
   const transactions = usePortfolioStore((s) => s.transactions);
   const portfolioHistory = usePortfolioStore((s) => s.portfolioHistory);
+  const getFuturesPositions = usePortfolioStore((s) => s.getFuturesPositions);
+  const loadPortfolio = usePortfolioStore((s) => s.loadFromBackend);
+  const user = useAuthStore((s) => s.user);
+  const closePosition = useLeverageStore((s) => s.closePosition);
+  const isClosingPosition = useLeverageStore((s) => s.isLoading);
 
   const [showAllTx, setShowAllTx] = useState(false);
 
@@ -34,6 +41,13 @@ export default function Portfolio() {
   const totalReturn = getTotalReturn(prices);
   const holdingsArr = getHoldingsArray(prices);
   const allocation = getAllocation(prices);
+  const futuresPositions = getFuturesPositions(prices);
+
+  const handleClosePosition = async (p) => {
+    const res = await closePosition(user?.id, p._id.toString(), null);
+    if (res.success) await loadPortfolio(prices);
+    else alert(res.message);
+  };
   const sparkData = portfolioHistory.slice(-30).map((p) => p.value);
 
   const totalStockValue = holdingsArr.reduce((s, h) => s + h.marketValue, 0);
@@ -60,6 +74,7 @@ export default function Portfolio() {
 
   const donutData = [
     { name: 'Stocks', value: Math.max(0, allocation.stocks) },
+    { name: 'Futures', value: Math.max(0, allocation.futures || 0) },
     { name: 'Cash', value: Math.max(0, allocation.cash) },
   ].filter((d) => d.value > 0);
 
@@ -132,6 +147,42 @@ export default function Portfolio() {
                 </table>
               </div>
             </div>
+
+            {/* Futures Positions */}
+            {futuresPositions.length > 0 && (
+              <div className="card" style={{padding:0}}>
+                <div style={{padding:'16px 20px',borderBottom:'var(--border-light)',display:'flex',justifyContent:'space-between',alignItems:'center'}}>
+                  <h4 style={{fontSize:'var(--text-md)',fontWeight:700}}>Futures Positions</h4>
+                  <span className="badge badge-gray">{futuresPositions.length} open</span>
+                </div>
+                <div className="table-container">
+                  <table className="table">
+                    <thead><tr><th>Ticker</th><th>Side</th><th>Lev</th><th>Qty</th><th>Entry</th><th>Mark</th><th>Liq.</th><th>Margin</th><th>Unrealized P&L</th><th>Value</th><th></th></tr></thead>
+                    <tbody>
+                      {futuresPositions.map((p) => {
+                        const stock = STOCKS.find((s) => s.ticker === p.ticker);
+                        const pnlPct = p.margin > 0 ? (p.unrealizedPnL / p.margin) * 100 : 0;
+                        return (
+                          <tr key={p._id}>
+                            <td><span className="badge" style={{background:`${stock?.color||'#888'}15`,color:stock?.color||'#888',fontSize:'11px'}}>{p.ticker}</span></td>
+                            <td><span className={`badge ${p.side==='Long'?'badge-green':'badge-red'}`} style={{fontSize:'11px'}}>{p.side}</span></td>
+                            <td style={{fontWeight:600}}>{p.leverage}×</td>
+                            <td style={{fontWeight:600}}>{p.quantity}</td>
+                            <td>{formatCurrency(p.entryPrice)}</td>
+                            <td style={{fontWeight:600}}>{formatCurrency(p.currentPrice)}</td>
+                            <td style={{color:'var(--red)'}}>{formatCurrency(p.liquidationPrice)}</td>
+                            <td>{formatCurrency(p.margin)}</td>
+                            <td><span style={{color:p.unrealizedPnL>=0?'var(--green)':'var(--red)',fontWeight:600}}>{p.unrealizedPnL>=0?'+':''}{formatCurrency(p.unrealizedPnL)} <span style={{fontSize:'11px'}}>({formatPercentRaw(pnlPct)})</span></span></td>
+                            <td style={{fontWeight:600}}>{formatCurrency(p.equity)}</td>
+                            <td><button onClick={() => handleClosePosition(p)} disabled={isClosingPosition} className="btn btn-outline btn-sm">Close</button></td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             {/* Transactions */}
             <div className="card" style={{padding:0}}>

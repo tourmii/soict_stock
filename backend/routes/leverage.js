@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { getDb } from '../services/db.js';
 import { ObjectId } from 'mongodb';
+import { updateLeaderboard } from '../services/valuation.js';
 
 const router = Router();
 const ALLOWED_LEVERAGE   = [2, 5, 10];
@@ -62,6 +63,10 @@ router.post('/open', async (req, res) => {
   };
 
   const result = await db.collection('leveraged_positions').insertOne(position);
+
+  // Keep the global leaderboard in sync for non-contest positions
+  if (!contestId) await updateLeaderboard(db, engine, userId);
+
   res.json({ success: true, position: { ...position, _id: result.insertedId } });
 });
 
@@ -94,6 +99,7 @@ router.post('/close', async (req, res) => {
     );
   } else {
     await db.collection('portfolios').updateOne({ userId }, { $inc: { cash: returnedCash } });
+    await updateLeaderboard(db, engine, userId);
   }
 
   res.json({ success: true, pnl, returnedCash, closePrice: price });

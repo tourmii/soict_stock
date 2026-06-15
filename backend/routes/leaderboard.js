@@ -1,10 +1,13 @@
 import { Router } from 'express';
 import { getDb } from '../services/db.js';
+import { futuresEquity } from '../services/valuation.js';
 
 const router = Router();
+const INITIAL_CASH = 150000;
 
 router.get('/', async (req, res) => {
   const db     = getDb();
+  const engine = req.app.locals.engine;
   const period = req.query.period || 'all-time';
 
   try {
@@ -16,28 +19,50 @@ router.get('/', async (req, res) => {
       filter.updatedAt = { $gte: new Date(Date.now() - 30 * 86400000).toISOString() };
     }
 
-    const leaders = await db.collection('leaderboard')
-      .find(filter)
-      .sort({ portfolioValue: -1 })
-      .limit(50)
-      .toArray();
-
-    // Join with users collection for display names
+    // Candidate leaders, then recompute each one's value LIVE so it reflects
+    // current prices + open futures equity (the stored value is action-time only).
+    const leaders = await db.collection('leaderboard').find(filter).toArray();
     const userIds = leaders.map((l) => l.userId).filter(Boolean);
-    const users   = userIds.length
-      ? await db.collection('users').find({ _id: { $in: userIds } }).toArray()
-      : [];
-    const nameMap = Object.fromEntries(users.map((u) => [u._id, u.display_name]));
 
-    const result = leaders.map((l, i) => ({
-      rank:      i + 1,
-      userId:    l.userId,
-      name:      nameMap[l.userId] || l.displayName || 'Anonymous',
-      portfolio: l.portfolioValue  || 0,
-      return:    l.totalReturn     || 0,
-      sharpe:    l.sharpe          || 0,
-      trades:    l.trades          || 0,
-    }));
+    const [users, portfolios, positions] = await Promise.all([
+      userIds.length ? db.collection('users').find({ _id: { $in: userIds } }).toArray() : [],
+      userIds.length ? db.collection('portfolios').find({ userId: { $in: userIds } }).toArray() : [],
+      userIds.length ? db.collection('leveraged_positions').find({ userId: { $in: userIds }, status: 'Open', contestId: null }).toArray() : [],
+    ]);
+
+    const nameMap = Object.fromEntries(users.map((u) => [u._id, u.display_name]));
+    const pfMap   = Object.fromEntries(portfolios.map((p) => [p.userId, p]));
+    const posMap  = {};
+    for (const p of positions) (posMap[p.userId] ||= []).push(p);
+
+    const liveValue = (userId, fallback) => {
+      const pf = pfMap[userId];
+      if (!pf) return fallback || 0;
+      let v = pf.cash;
+      for (const [t, h] of Object.entries(pf.holdings || {})) {
+        if (h.shares > 0) v += h.shares * (engine?.prices[t] || 0);
+      }
+      v += futuresEquity(posMap[userId] || [], engine?.prices || {});
+      return v;
+    };
+
+    const result = leaders
+      .map((l) => {
+        const pf = pfMap[l.userId];
+        const initialCash = pf?.initialCash || INITIAL_CASH;
+        const portfolio = liveValue(l.userId, l.portfolioValue);
+        return {
+          userId:    l.userId,
+          name:      nameMap[l.userId] || l.displayName || 'Anonymous',
+          portfolio,
+          return:    ((portfolio - initialCash) / initialCash) * 100,
+          sharpe:    l.sharpe || 0,
+          trades:    l.trades || 0,
+        };
+      })
+      .sort((a, b) => b.portfolio - a.portfolio)
+      .slice(0, 50)
+      .map((l, i) => ({ rank: i + 1, ...l }));
 
     // If no real data yet, return mock data so the UI has something to show
     if (result.length === 0) {

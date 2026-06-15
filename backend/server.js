@@ -23,8 +23,28 @@ import learningRoutes from './routes/learning.js';
 import chatbotRoutes from './routes/chatbot.js';
 import { setupPriceStream } from './websocket/priceStream.js';
 
+// When RESET_ON_BOOT is enabled, wipe market history + contest state so prices
+// regenerate from scratch on the next init. Keeps redeploys fully in sync.
+// Regular (non-contest) portfolios are preserved — they reference tickers, not
+// the dropped contest ids.
+async function resetMarketData(db) {
+  const results = await Promise.all([
+    db.collection('ticks').deleteMany({}),
+    db.collection('contests').deleteMany({}),
+    db.collection('contest_portfolios').deleteMany({}),
+    db.collection('contest_transactions').deleteMany({}),
+    db.collection('leveraged_positions').deleteMany({ contestId: { $ne: null } }),
+  ]);
+  const [ticks, contests, cPort, cTx, levPos] = results.map((r) => r.deletedCount);
+  console.log(`🧹 RESET_ON_BOOT: dropped ${ticks} ticks, ${contests} contests, ${cPort} contest portfolios, ${cTx} contest txns, ${levPos} contest positions — prices will regenerate`);
+}
+
 async function main() {
   await connectDB();
+
+  if (/^(1|true|yes)$/i.test(process.env.RESET_ON_BOOT || '')) {
+    await resetMarketData(getDb());
+  }
 
   const app    = express();
   const server = createServer(app);

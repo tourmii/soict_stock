@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { api } from '../lib/api';
+import { useLeverageStore } from './leverageStore';
 
 export const useContestStore = create((set, get) => ({
   contests: [],
@@ -86,7 +87,7 @@ export const useContestStore = create((set, get) => ({
   },
   
   getContestPortfolioValue: (prices) => {
-      const { portfolio } = get();
+      const { portfolio, currentContest } = get();
       if (!portfolio) return 0;
       let stockValue = 0;
       for (const h of (portfolio.holdings || [])) {
@@ -94,6 +95,25 @@ export const useContestStore = create((set, get) => ({
               stockValue += h.shares * (prices[h.ticker] || h.avgPrice || 0);
           }
       }
-      return portfolio.cash + stockValue;
+      return portfolio.cash + stockValue + get().getContestFuturesEquity(prices);
   },
+
+  /* Open contest futures positions with live P&L and equity.
+     Margin was deducted from the contest cash on open, so each position is
+     worth max(0, margin + unrealizedPnL). */
+  getContestFuturesPositions: (prices) => {
+      const { currentContest } = get();
+      if (!currentContest) return [];
+      const positions = useLeverageStore.getState().positions || [];
+      return positions
+          .filter((p) => p.contestId === currentContest._id && p.status === 'Open')
+          .map((p) => {
+              const currentPrice = prices[p.ticker] || p.entryPrice;
+              const unrealizedPnL = (currentPrice - p.entryPrice) * p.quantity * (p.side === 'Long' ? 1 : -1);
+              return { ...p, currentPrice, unrealizedPnL, equity: Math.max(0, p.margin + unrealizedPnL) };
+          });
+  },
+
+  getContestFuturesEquity: (prices) =>
+      get().getContestFuturesPositions(prices).reduce((sum, p) => sum + p.equity, 0),
 }));

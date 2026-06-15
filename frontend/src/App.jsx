@@ -22,6 +22,7 @@ import { useNewsStore } from './store/newsStore';
 import { useOrderStore } from './store/orderStore';
 import { usePortfolioStore } from './store/portfolioStore';
 import { useLeaderboardStore } from './store/leaderboardStore';
+import { useLeverageStore } from './store/leverageStore';
 import { useAuthStore } from './store/authStore';
 
 function App() {
@@ -37,6 +38,7 @@ function App() {
   const recordSnapshot = usePortfolioStore((s) => s.recordSnapshot);
   const loadPortfolio = usePortfolioStore((s) => s.loadFromBackend);
   const fetchLeaderboard = useLeaderboardStore((s) => s.fetchFromBackend);
+  const fetchLeveragePositions = useLeverageStore((s) => s.fetchPositions);
 
   const updatePrices        = useMarketStore((s) => s.updatePrices);
   const initFromServer      = useMarketStore((s) => s.initFromServer);
@@ -60,6 +62,7 @@ function App() {
     if (user) {
       loadPortfolio(prices);
       loadOpenOrders();
+      fetchLeveragePositions(user.id, null);
     }
   }, [user]);
 
