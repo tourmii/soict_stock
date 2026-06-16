@@ -130,3 +130,55 @@ Thành phần này được thiết kế theo mô hình **Sự kiện Tác độ
 > **KẾT LUẬN CỦA COMPONENT NEWS & SCENARIO:**
 > *   **Về Backend:** Đây là thành quả tuyệt vời của thiết kế mô-đun (Modularity). Nhờ việc cô lập lõi toán học ở `SimulationEngine`, cụm `NewsInjector` và `Scenarios` có thể dễ dàng "kết nối" (hook) vào Engine để bóp méo thông số đầu vào (Drift, Volatility, Price) ở thời gian thực mà không làm vỡ cấu trúc code.
 > *   **Về Frontend:** Tạo ra một "Lớp lang bối cảnh" (Contextual Overlay). Bằng cách kết nối UI của Bảng tin với những cú sốc hiển thị trên Biểu đồ, Frontend đã thành công trong việc mô phỏng lại một môi trường áp lực cao của các phòng giao dịch (Trading floor) chuyên nghiệp, nâng tầm ứng dụng từ một trò chơi điện tử thành một công cụ sư phạm tài chính thực thụ.
+
+---
+
+# PHẦN 3: PHÂN TÍCH TOÁN HỌC CỦA ĐỘNG CƠ SINH GIÁ (SIMULATION ENGINE)
+
+Dựa vào mã nguồn thực tế tại file `backend/services/simulationEngine.js`, thuật toán sinh giá của SoictStock là một sự kết hợp cực kỳ tinh vi của **4 mô hình Toán học Tài chính** nổi tiếng. Nó vượt xa hàm random thông thường để tạo ra biểu đồ giống hệt thị trường thật. 
+
+Dưới đây là giải thích chi tiết các công thức toán học ẩn sau Engine này:
+
+## 3.1. Lõi thuật toán: Mô hình Merton Jump-Diffusion
+Đây là bộ khung chính của hệ thống. Nó mở rộng từ mô hình hình học Brownian (GBM - chuyên dùng để định giá quyền chọn Black-Scholes) bằng cách cộng thêm các "Cú sốc" (Jumps) để phản ánh thực tế thỉnh thoảng thị trường có tin tức đột ngột.
+
+Phương trình vi phân ngẫu nhiên (SDE) gốc:
+$$dS = \mu S dt + \sigma S dW + S(J-1) dN$$
+
+Chuyển đổi sang **Công thức Lợi suất Logarit (Log-return)** được code trong hàm `_mertonStep()`:
+$$\Delta \ln(P) = \left( \mu_{eff} - \frac{\sigma_{eff}^2}{2} \right) \Delta t + \sigma_{eff} \sqrt{\Delta t} \cdot Z + \sum_{j=1}^{N} (\mu_J + \sigma_J \cdot Z_j)$$
+
+**Giải thích các biến số trong Code:**
+*   $\Delta \ln(P)$: Sự thay đổi của giá theo logarit. Mức giá mới được tính bằng $Price_{new} = Price_{old} \times e^{\Delta \ln(P)}$.
+*   $\Delta t$ (`dt`): Khoảng thời gian của 1 bước nhảy. Đối với giá realtime (tick), $\Delta t = 1/90000$ năm giao dịch. Đối với nến lịch sử, $\Delta t = 1/(252 \times 78)$.
+*   $Z$ (`randn()`): Biến ngẫu nhiên tuân theo phân phối chuẩn $\mathcal{N}(0, 1)$ tạo ra nhiễu loạn đồ thị (noise).
+*   **Phần Cú sốc (Jump):** Chữ $N$ là số lượng cú sốc xảy ra trong khoảng thời gian $\Delta t$, tuân theo **Phân phối Poisson** với tần suất $\lambda$ (`poisson(lambda * dt)`). Mỗi cú sốc sẽ cộng thêm một lượng giật giá $(\mu_J + \sigma_J \cdot Z_j)$.
+
+## 3.2. Cách hệ thống nhào nặn biến $\mu_{eff}$ (Lực đẩy/Xu hướng giá)
+Trong hệ thống, $\mu_{eff}$ (`effectiveDrift`) không phải là số tĩnh, mà được tổng hợp từ 4 lực kéo khác nhau tại mỗi tích tắc (mỗi 3 giây):
+
+$$\mu_{eff} = Drift_{g\hat{o}c} + Drift_{kịch\_bản} + Momentum + MeanReversion$$
+
+*   **$Drift_{g\hat{o}c}$:** Tốc độ tăng trưởng dài hạn mặc định của công ty.
+*   **$Drift_{kịch\_bản}$:** Hệ số do Admin áp đặt (VD: Bật kịch bản "Bong bóng Công nghệ" sẽ cộng thêm `+0.02` vào ngành Tech).
+*   **$Momentum$ (Quán tính):** Hệ thống tính đường Trung bình động Mũ (EMA) của các lợi suất vừa xảy ra. Nếu giá vừa sập mạnh, biến Momentum sẽ bị âm. Ở những nhịp 3 giây tiếp theo, $\mu_{eff}$ sẽ bị âm theo, khiến giá tiếp tục "trôi dốc" (Trend-following) thay vì chỉ giật 1 phát rồi thôi.
+*   **$MeanReversion$ (Hồi quy trung bình - Mô hình Ornstein-Uhlenbeck):** Lực kéo từ trường lực.
+    $$MeanReversion = - \kappa \times \ln\left( \frac{Price_{current}}{BasePrice} \right)$$
+    *Giải thích:* Nếu giá hiện tại chạy quá cao so với giá trị thực ($BasePrice$), lực này sẽ biến thành số Âm để "hãm phanh" và kéo giá xuống từ từ, đảm bảo đồ thị chạy nhiều tháng không bị bay mất vào không gian.
+
+## 3.3. Cách hệ thống nhào nặn biến $\sigma_{eff}$ (Độ rung lắc/Độ lệch chuẩn)
+Tương tự, $\sigma_{eff}$ (`effectiveVol`) quyết định thân nến dài hay ngắn, thị trường êm ả hay giật cục:
+
+$$\sigma_{eff} = Volatility_{g\hat{o}c} \times Vol_{kịch\_bản} \times VolCluster$$
+
+*   **$VolCluster$ (Mô hình tựa GARCH):** Bình thường biến này $= 1$. Tuy nhiên, khi `NewsInjector` bơm một bản tin xấu vào, nó đẩy $VolCluster$ lên bằng 2 hoặc 3. 
+*   Lúc này, $\sigma_{eff}$ to ra gấp 3 lần $\rightarrow$ Yếu tố nhiễu $Z$ bị nhân lên cực lớn $\rightarrow$ Biểu đồ hình thành những cây nến dao động điên cuồng lên xuống, tái tạo lại hoàn hảo **Sự hoảng loạn tâm lý đám đông (Volatility Clustering)**.
+*   Sau đó, biến $VolCluster$ sẽ phân rã (decay) dần dần về lại số 1 (thị trường bình tĩnh lại).
+
+## 3.4. Thuật toán Cầu Brownian (Brownian Bridge) để nặn Râu nến
+Đây là bài toán khó: Database chỉ lưu nến 5-phút. Mức giá Mở cửa (Open) và Đóng cửa (Close) được tính bằng mô hình Merton ở phần 1. Nhưng làm sao để tìm ra Râu trên (High) và Râu dưới (Low) của cây nến một cách tự nhiên?
+
+*   Trong code, hàm `_barWicks()` sử dụng mô hình **Brownian Bridge (Cầu Brownian)**. 
+*   Thay vì cho High/Low ngẫu nhiên bừa bãi, thuật toán vẽ ra hàng chục bước random walk vi mô từ điểm $Open = 0$ và **bị ép (pinned)** phải kết thúc tại điểm $Close = L$ (Lợi suất logarit cuối cùng).
+*   Đỉnh cao nhất và thấp nhất trên "cây cầu" này được chốt làm High và Low của nến.
+*   **Kết quả:** Do bị ép phải đi từ Open đến Close, nên nếu nến tăng (Xanh), thuật toán thường ép giá phải nhúng xuống tạo đáy trước khi vọt lên tạo đỉnh $\rightarrow$ Sinh ra râu dưới dài hơn râu trên. Điều này tuân thủ một cách hoàn hảo các mô hình hành vi giá (Price Action) trong thực tế!
